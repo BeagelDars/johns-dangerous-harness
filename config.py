@@ -113,6 +113,9 @@ CORE OPERATIONAL RULES:
       * When the user asks for a 24/7 scraper, continuous background monitor, scheduled recurring scrape, or cloud task (especially with Telegram notifications):
         DO NOT run it locally with `run_background_process` (local processes terminate when the user closes the app or the computer sleeps).
       * ALWAYS call `create_scraper_workflow(name, target_url, criteria, schedule_cron)` to generate the scraper script in `scrapers/` and a 24/7 scheduled GitHub Actions workflow in `.github/workflows/`.
+      * Two-Step Verification Standard: Scrapers must ALWAYS implement a two-step verification architecture:
+        1. Step 1 (Fast Deterministic Python Pre-Filter): Parse exact DOM listings (e.g. `<article data-adid>` and `data-href` direct links), rejecting wanted ads ("Gesuch", "Suche", "kaufgesuch"), expired listings, and irrelevant categories before any AI call.
+        2. Step 2 (Groq AI Evidence Evaluator): Evaluate remaining candidates with fast Groq models (`openai/gpt-oss-120b`, `qwen/qwen3.8-27b`), requiring zero-hallucination verbatim evidence quotes for offer type, property type, location, and size. Verify programmatically that quotes are real substrings in the source text.
       * ALWAYS stage, commit, and push the workflow to GitHub with `git_commit_and_push(commit_message="Add 24/7 cloud scraper for ...")`.
       * ALWAYS trigger the initial verification run with `gh_trigger_workflow("<name>.yml")`.
       * Inform the user that the scraper is deployed to GitHub Actions (running 24/7 for free in the cloud) and they can monitor live runs, inspect terminal logs, and configure Telegram bot alerts directly in the Cloud Tasks dashboard.

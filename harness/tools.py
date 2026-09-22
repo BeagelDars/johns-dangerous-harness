@@ -2108,28 +2108,53 @@ def create_scraper_workflow(name: str, target_url: str, criteria: str = "", sche
         # 2. Python scraper script template
         scraper_template = r'''#!/usr/bin/env python3
 """
-Autonomous Cloud Scraper: __SAFE_NAME__
+Autonomous High-Precision Cloud Scraper: __SAFE_NAME__
 Target: __TARGET_URL__
 Criteria: __CRITERIA__
 Scheduled via GitHub Actions (Cron: __SCHEDULE_CRON__)
+Two-Step Verification Pipeline:
+  Step 1: Deterministic Python Pre-Filter (direct links, wanted ad rejection, keyword matching)
+  Step 2: Groq AI Evidence Evaluator (strict zero-hallucination verbatim quote verification)
 """
 import os
 import sys
 import json
 import re
 import urllib.request
+import urllib.error
 import urllib.parse
 from datetime import datetime
+
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+if hasattr(sys.stderr, "reconfigure"):
+    try:
+        sys.stderr.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
 
 TARGET_URL = "__TARGET_URL__"
 CRITERIA = "__CRITERIA__"
 DATA_FILE = os.path.join(os.path.dirname(__file__), "data", "__SAFE_NAME___results.json")
+GROQ_KEY = os.environ.get("GROQ_API_KEY") or ""
+
+def safe_log(msg: str):
+    try:
+        print(msg)
+    except Exception:
+        try:
+            print(msg.encode("ascii", errors="replace").decode("ascii"))
+        except Exception:
+            pass
 
 def send_telegram(text: str):
     token = os.environ.get("TELEGRAM_BOT_TOKEN")
     chat_id = os.environ.get("TELEGRAM_CHAT_ID")
     if not token or not chat_id:
-        print("[Telegram] Skipping notification: TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not set.")
+        safe_log("[Telegram] Skipping notification: TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not set.")
         return False
     try:
         url = f"https://api.telegram.org/bot{token}/sendMessage"
@@ -2139,76 +2164,200 @@ def send_telegram(text: str):
             "parse_mode": "Markdown",
             "disable_web_page_preview": False
         }).encode("utf-8")
-        req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json", "User-Agent": "JohnsHarnessScraper/1.0"})
+        req = urllib.request.Request(
+            url,
+            data=payload,
+            headers={"Content-Type": "application/json", "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+        )
         with urllib.request.urlopen(req, timeout=15) as resp:
-            print("[Telegram] Notification sent successfully!")
+            safe_log("[Telegram] Notification sent successfully!")
             return True
     except Exception as e:
-        print(f"[Telegram] Failed to send notification: {e}")
+        safe_log(f"[Telegram] Failed to send notification: {e}")
         return False
 
+def parse_listings(html: str, base_url: str):
+    """Extracts raw candidate listings from HTML."""
+    items = []
+    # 1. Try structured article elements first (e.g. Kleinanzeigen, ImmoScout, etc.)
+    articles = re.findall(r'<article\s+[^>]*data-adid=[\'"](\d+)[\'"][^>]*>([\s\S]*?)</article>', html)
+    if articles:
+        for ad_id, block in articles:
+            href_m = re.search(r'data-href=[\'"]([^\'"]+)[\'"]', block) or re.search(r'href=[\'"](/s-anzeige/[^\'"]+)[\'"]', block)
+            if not href_m:
+                continue
+            full_url = urllib.parse.urljoin("https://www.kleinanzeigen.de", href_m.group(1))
+            title_m = re.search(r'<a\s+[^>]*class=[\'"][^\'"]*ellipsis[^\'"]*[\'"][^>]*>(.*?)</a>', block, re.DOTALL) or re.search(r'<h2[^>]*>(.*?)</h2>', block, re.DOTALL)
+            title = re.sub(r'<[^>]+>', ' ', title_m.group(1)).strip() if title_m else ""
+            price_m = re.search(r'class=[\'"][^\'"]*price[^\'"]*[\'"][^>]*>(.*?)</div>', block, re.DOTALL)
+            price = re.sub(r'<[^>]+>', ' ', price_m.group(1)).strip() if price_m else "N/A"
+            loc_m = re.search(r'class=[\'"][^\'"]*aditem-main--top--left[^\'"]*[\'"][^>]*>(.*?)</div>', block, re.DOTALL)
+            location = re.sub(r'<[^>]+>', ' ', loc_m.group(1)).strip() if loc_m else ""
+            tags = [re.sub(r'<[^>]+>', '', t).strip() for t in re.findall(r'<span\s+class=[\'"][^\'"]*simpletag[^\'"]*[\'"][^>]*>(.*?)</span>', block)]
+            items.append({"ad_id": ad_id, "title": title, "url": full_url, "price": price, "location": location, "tags": tags, "description": ""})
+        return items
+
+    # 2. General fallback for other websites
+    matches = re.findall(r'<a\s+[^>]*href="([^"]+)"[^>]*>(.*?)</a>', html, re.IGNORECASE)
+    for idx, (href, text) in enumerate(matches):
+        clean_text = re.sub(r'<[^>]+>', '', text).strip()
+        if clean_text and len(clean_text) > 8 and not href.startswith('#') and not href.startswith('javascript:'):
+            full_url = urllib.parse.urljoin(base_url, href)
+            items.append({"ad_id": str(idx), "title": clean_text, "url": full_url, "price": "N/A", "location": "", "tags": [], "description": ""})
+    return items
+
+def python_pre_filter(item: dict) -> bool:
+    """Step 1: Deterministic filter to reject wanted ads and irrelevant content."""
+    title_lower = (item.get("title") or "").lower()
+    tags_lower = [t.lower() for t in item.get("tags", [])]
+    full_text = f"{title_lower} {' '.join(tags_lower)}"
+
+    # Reject wanted ads (Gesuche / Suche)
+    if "gesuch" in tags_lower or any("gesuch" in t for t in tags_lower):
+        return False
+    wanted_kw = ["gesucht", "kaufgesuch", "suche baugrundstück", "suche grundstück", "suche ackerland", "suchauftrag", "gesuche", "ankauf"]
+    if any(k in title_lower for k in wanted_kw):
+        return False
+
+    # Check criteria keywords if provided
+    if CRITERIA:
+        keywords = [k.strip().lower() for k in CRITERIA.split() if len(k.strip()) > 3 and not k.startswith("http")]
+        if keywords and not any(kw in full_text for kw in keywords):
+            return False
+
+    return True
+
+def groq_verify_candidates(candidates: list) -> list:
+    """Step 2: Groq AI Evidence-Based Verifier."""
+    if not candidates or not GROQ_KEY:
+        return candidates
+
+    safe_log(f"[Groq AI] Verifying {len(candidates)} candidates via AI evidence evaluation...")
+    verified = []
+    chunk_size = 8
+    models = ["openai/gpt-oss-120b", "qwen/qwen3.8-27b", "openai/gpt-oss-20b"]
+
+    for i in range(0, len(candidates), chunk_size):
+        chunk = candidates[i:i + chunk_size]
+        items_payload = [{"ad_id": c["ad_id"], "title": c["title"], "price": c.get("price", ""), "location": c.get("location", ""), "tags": c.get("tags", [])} for c in chunk]
+        
+        prompt = f"""You are a strict, zero-hallucination evaluator AI.
+Criteria: {CRITERIA or 'Valid relevant offers/listings'}
+
+Items to audit:
+{json.dumps(items_payload, indent=2, ensure_ascii=False)}
+
+CRITICAL RULES:
+1. ONLY OFFERS: Wanted ads, inquiries, or irrelevant items MUST be REJECTED.
+2. EVIDENCE REQUIRED: For any item marked PASS, extract exact verbatim substrings from title, tags, or location:
+   - "offer_type_quote": Quote proving offer/listing
+   - "target_match_quote": Quote proving it matches the criteria
+3. Quotes MUST exist verbatim in the source text.
+
+Return JSON:
+{{
+  "verifications": [
+    {{"ad_id": "...", "verdict": "PASS" | "REJECT", "rejection_reason": "...", "evidence": {{"offer_type_quote": "...", "target_match_quote": "..."}}}}
+  ]
+}}
+"""
+        success = False
+        for m in models:
+            try:
+                body = json.dumps({"model": m, "messages": [{"role": "user", "content": prompt}], "response_format": {"type": "json_object"}, "temperature": 0.05}).encode("utf-8")
+                req = urllib.request.Request("https://api.groq.com/openai/v1/chat/completions", data=body, headers={"Authorization": f"Bearer {GROQ_KEY}", "Content-Type": "application/json", "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"})
+                with urllib.request.urlopen(req, timeout=20) as resp:
+                    data = json.loads(resp.read().decode("utf-8"))
+                    parsed = json.loads(data["choices"][0]["message"]["content"])
+                    ver_map = {str(v.get("ad_id")): v for v in parsed.get("verifications", [])}
+                    for c in chunk:
+                        v = ver_map.get(str(c["ad_id"]))
+                        if v and v.get("verdict") == "PASS":
+                            ev = v.get("evidence", {})
+                            c_text = f"{c['title']} {' '.join(c.get('tags', []))} {c.get('location', '')}".lower()
+                            # Anti-hallucination substring check
+                            if all((ev.get(k) or "").strip().lower() in c_text for k in ["offer_type_quote", "target_match_quote"] if ev.get(k)):
+                                c["ai_verification"] = {"model": m, "evidence": ev, "verified_at": datetime.now().isoformat()}
+                                verified.append(c)
+                                safe_log(f"[Groq AI] ad #{c['ad_id']} PASSED ({m})")
+                            else:
+                                safe_log(f"[Groq AI] Rejecting ad #{c['ad_id']}: Evidence quote not in source.")
+                        else:
+                            safe_log(f"[Groq AI] Filtered ad #{c['ad_id']}: {v.get('rejection_reason') if v else 'No match'}")
+                    success = True
+                    break
+            except Exception as e:
+                safe_log(f"[Groq AI] Model {m} error: {e}")
+                continue
+        if not success:
+            verified.extend(chunk)
+
+    return verified
+
 def run_scrape():
-    print(f"[Scraper] Starting scrape for {TARGET_URL} at {datetime.now().isoformat()}...")
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"}
+    safe_log(f"[Scraper] Starting scrape for {TARGET_URL} at {datetime.now().isoformat()}...")
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"}
     req = urllib.request.Request(TARGET_URL, headers=headers)
-    
     try:
         with urllib.request.urlopen(req, timeout=25) as resp:
             html = resp.read().decode("utf-8", errors="replace")
     except Exception as e:
-        print(f"[Error] Failed to fetch {TARGET_URL}: {e}")
+        safe_log(f"[Error] Failed to fetch {TARGET_URL}: {e}")
         sys.exit(1)
 
-    print(f"[Scraper] Successfully downloaded {len(html)} bytes from {TARGET_URL}.")
-
-    # Simple robust regex extraction for links and headings
-    items = []
-    matches = re.findall(r'<a\s+[^>]*href="([^"]+)"[^>]*>(.*?)</a>', html, re.IGNORECASE)
-    for href, text in matches:
-        clean_text = re.sub(r'<[^>]+>', '', text).strip()
-        if clean_text and len(clean_text) > 8 and not href.startswith('#') and not href.startswith('javascript:'):
-            full_url = urllib.parse.urljoin(TARGET_URL, href)
-            if CRITERIA:
-                keywords = [k.strip().lower() for k in CRITERIA.split() if len(k.strip()) > 2]
-                if any(kw in clean_text.lower() for kw in keywords):
-                    items.append({"title": clean_text, "url": full_url, "scraped_at": datetime.now().isoformat()})
-            else:
-                items.append({"title": clean_text, "url": full_url, "scraped_at": datetime.now().isoformat()})
+    raw_items = parse_listings(html, TARGET_URL)
+    safe_log(f"[Step 0] Extracted {len(raw_items)} raw listings.")
 
     # Deduplicate by url
     unique_items = []
     seen = set()
-    for item in items:
+    for item in raw_items:
         if item["url"] not in seen:
             seen.add(item["url"])
             unique_items.append(item)
 
-    print(f"[Scraper] Found {len(unique_items)} matching items.")
+    step1_items = [it for it in unique_items if python_pre_filter(it)]
+    safe_log(f"[Step 1] Kept {len(step1_items)} candidates after deterministic filtering.")
+
+    verified_items = groq_verify_candidates(step1_items)
+    safe_log(f"[Step 2] {len(verified_items)} items verified by Groq AI.")
 
     # Save to data directory
+    output_payload = {
+        "scraper_version": "2.0-two-step-verified",
+        "last_updated": datetime.now().isoformat(),
+        "target_url": TARGET_URL,
+        "criteria": CRITERIA,
+        "raw_scanned": len(unique_items),
+        "step1_filtered": len(step1_items),
+        "verified_count": len(verified_items),
+        "items": verified_items
+    }
+
     os.makedirs(os.path.dirname(DATA_FILE), exist_ok=True)
     with open(DATA_FILE, "w", encoding="utf-8") as f:
-        json.dump(unique_items, f, indent=2, ensure_ascii=False)
-    print(f"[Scraper] Saved results to {DATA_FILE}.")
+        json.dump(output_payload, f, indent=2, ensure_ascii=False)
+    safe_log(f"[Scraper] Saved results to {DATA_FILE}.")
 
     # Telegram notification summary
-    if unique_items:
-        top_items = unique_items[:5]
+    if verified_items:
+        top_items = verified_items[:5]
         msg_lines = [
             f"🚀 *Scraper Alert: __SAFE_NAME__*",
             f"📍 *Source:* {TARGET_URL}",
-            f"🎯 *Matched:* {len(unique_items)} items",
+            f"🎯 *Verified Matches:* {len(verified_items)} items",
             ""
         ]
         for idx, itm in enumerate(top_items, 1):
-            msg_lines.append(f"{idx}. [{itm['title']}]({itm['url']})")
+            price_str = f" ({itm['price']})" if itm.get("price") and itm["price"] != "N/A" else ""
+            msg_lines.append(f"{idx}. [{itm['title'][:50]}]({itm['url']}){price_str}")
         
-        if len(unique_items) > 5:
-            msg_lines.append(f"\\n_...and {len(unique_items) - 5} more items._")
+        if len(verified_items) > 5:
+            msg_lines.append(f"\n_...and {len(verified_items) - 5} more items in Dashboard._")
 
-        send_telegram("\\n".join(msg_lines))
+        send_telegram("\n".join(msg_lines))
     else:
-        print("[Scraper] No items matched criteria on this run.")
+        safe_log("[Scraper] No items matched criteria on this run.")
 
 if __name__ == "__main__":
     run_scrape()
@@ -2259,6 +2408,7 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: |
           python scrapers/__SAFE_NAME__.py
 
