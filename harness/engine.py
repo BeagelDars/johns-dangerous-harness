@@ -71,8 +71,9 @@ class AgentEngine:
         complex_keywords = [
             'debug', 'fix bug', 'architect', 'refactor', 'design', 'algorithm',
             'why does', 'deep research', 'plan a', 'solve complex', 'write code',
-            'build an app', 'optimize', 'implement', 'research', 'search the web',
-            'google', 'duckduckgo', 'look up', 'latest', 'news about'
+            'build an app', 'create an app', 'create a new app', 'create app',
+            'make an app', 'web app', 'application', 'optimize', 'implement',
+            'research', 'search the web', 'google', 'duckduckgo', 'look up', 'latest', 'news about'
         ]
         routine_keywords = [
             'scrape', 'scraping', 'fetch', 'extract', 'review text', 'summarize',

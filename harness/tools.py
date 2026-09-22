@@ -1493,6 +1493,8 @@ def git_init(repo_dir: str = ".") -> str:
     try:
         target = resolve_path(repo_dir)
         os.makedirs(target, exist_ok=True)
+        if os.path.exists(os.path.join(target, ".git")):
+            return f"Git repository is already initialized at: {target}"
         res = subprocess.run(
             ["git", "init"],
             cwd=target,
@@ -1743,13 +1745,12 @@ def github_create_repo(repo_name: str = "", name: str = "", private: bool = Fals
         vis_flag = "--private" if private else "--public"
 
         # Check if remote origin already exists
-        rem_check = subprocess.run(["git", "remote"], cwd=target_dir, capture_output=True, text=True, env=_git_env(), creationflags=_WIN_NO_WINDOW)
-        remotes = [r.strip() for r in rem_check.stdout.splitlines() if r.strip()]
+        rem_check = subprocess.run(["git", "remote", "-v"], cwd=target_dir, capture_output=True, text=True, env=_git_env(), creationflags=_WIN_NO_WINDOW)
+        if "origin" in rem_check.stdout:
+            push_res = subprocess.run(["git", "push", "-u", "origin", "main"], cwd=target_dir, capture_output=True, text=True, env=_git_env(), creationflags=_WIN_NO_WINDOW, timeout=40)
+            return f"Project is already connected to GitHub repository. Pushed latest code to origin/main.\n{push_res.stdout.strip() or push_res.stderr.strip()}"
 
-        cmd = ["gh", "repo", "create", effective_name, vis_flag, "--source=.", "--push"]
-        if "origin" not in remotes:
-            cmd.insert(-1, "--remote=origin")
-
+        cmd = ["gh", "repo", "create", effective_name, vis_flag, "--source=.", "--remote=origin", "--push"]
         res = subprocess.run(
             cmd,
             cwd=target_dir,
@@ -1763,12 +1764,8 @@ def github_create_repo(repo_name: str = "", name: str = "", private: bool = Fals
         )
         out = (res.stdout.strip() + "\n" + res.stderr.strip()).strip()
         if res.returncode != 0:
-            if "already exists" in out.lower():
-                # Push to existing repository
-                push_res = subprocess.run(["git", "push", "-u", "origin", "main"], cwd=target_dir, capture_output=True, text=True, env=_git_env(), creationflags=_WIN_NO_WINDOW, timeout=40)
-                return f"GitHub repo already exists. Pushed changes to remote.\n{push_res.stdout.strip() or push_res.stderr.strip()}"
             return f"GitHub repo creation failed:\n{out}"
-        return f"Successfully created GitHub repository '{effective_name}'!\n{out}"
+        return f"Successfully created GitHub repository '{effective_name}' and pushed code!\n{out}"
     except Exception as e:
         return f"Error creating GitHub repository: {e}"
 
