@@ -2732,22 +2732,34 @@ window.harness.onEvent((event) => {
 // ==============================================================================
 
 function openCloudDashboard() {
-  if (!cloudDashboardModal) return;
-  cloudDashboardModal.style.display = 'flex';
+  const modal = cloudDashboardModal || document.getElementById('cloudDashboardModal');
+  if (!modal) return;
+  modal.style.display = 'flex';
   if (window.harness && window.harness.cloudListTasks) {
     window.harness.cloudListTasks();
   }
 }
 
 function closeCloudDashboard() {
-  if (!cloudDashboardModal) return;
-  cloudDashboardModal.style.display = 'none';
-  if (cloudTelegramPanel) cloudTelegramPanel.style.display = 'none';
+  const modal = cloudDashboardModal || document.getElementById('cloudDashboardModal');
+  if (modal) modal.style.display = 'none';
+  const telPanel = cloudTelegramPanel || document.getElementById('cloudTelegramPanel');
+  if (telPanel) telPanel.style.display = 'none';
 }
 
-if (cloudTasksBtn) cloudTasksBtn.addEventListener('click', openCloudDashboard);
+const btnCloud = cloudTasksBtn || document.getElementById('cloudTasksBtn');
+if (btnCloud) btnCloud.addEventListener('click', openCloudDashboard);
 if (cloudCloseBtn) cloudCloseBtn.addEventListener('click', closeCloudDashboard);
 if (cloudModalBackdrop) cloudModalBackdrop.addEventListener('click', closeCloudDashboard);
+
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    const modal = cloudDashboardModal || document.getElementById('cloudDashboardModal');
+    if (modal && modal.style.display !== 'none') {
+      closeCloudDashboard();
+    }
+  }
+});
 
 if (cloudRefreshBtn) {
   cloudRefreshBtn.addEventListener('click', () => {
