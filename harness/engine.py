@@ -179,12 +179,12 @@ class AgentEngine:
         if any(k in text_corpus for k in proc_keys):
             chosen_names.update([
                 'run_python_code', 'run_background_process',
-                'get_background_tasks', 'stop_background_process'
+                'list_background_processes', 'check_background_process', 'stop_background_process'
             ])
 
         if any(k in text_corpus for k in web_keys):
             chosen_names.update([
-                'fetch_web_content', 'duckduckgo_search'
+                'web_search', 'fetch_webpage'
             ])
 
         filtered = [s for s in all_schemas if s.get("function", {}).get("name") in chosen_names]

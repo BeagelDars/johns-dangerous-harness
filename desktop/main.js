@@ -133,8 +133,41 @@ function createWindow() {
   });
 }
 
+// Single Instance Lock to prevent multiple app instances from conflicting
+const gotTheLock = app.requestSingleInstanceLock();
+if (!gotTheLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
+  });
+}
+
+function killBackend() {
+  if (pythonProcess && pythonProcess.pid) {
+    try {
+      sendToPython({ action: 'exit' });
+    } catch (e) {}
+    try {
+      if (process.platform === 'win32') {
+        spawn('taskkill', ['/F', '/T', '/PID', pythonProcess.pid.toString()], {
+          windowsHide: true,
+          stdio: 'ignore'
+        });
+      } else {
+        pythonProcess.kill();
+      }
+    } catch (e) {}
+    pythonProcess = null;
+  }
+}
+
 // App lifecycle
 app.whenReady().then(() => {
+  if (!gotTheLock) return;
   startPythonBackend();
   createWindow();
 
@@ -146,24 +179,14 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
-  // Terminate python process cleanly
-  if (pythonProcess) {
-    try {
-      sendToPython({ action: 'exit' });
-      pythonProcess.kill();
-    } catch (e) {}
-  }
+  killBackend();
   if (process.platform !== 'darwin') {
     app.quit();
   }
 });
 
 app.on('before-quit', () => {
-  if (pythonProcess) {
-    try {
-      pythonProcess.kill();
-    } catch (e) {}
-  }
+  killBackend();
 });
 
 // IPC listeners from UI

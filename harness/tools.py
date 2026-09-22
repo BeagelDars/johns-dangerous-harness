@@ -259,7 +259,7 @@ def terminate_current_process():
             try:
                 pid = CURRENT_RUNNING_PROCESS.pid
                 if os.name == "nt":
-                    subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)], capture_output=True)
+                    subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)], stdin=subprocess.DEVNULL, capture_output=True, timeout=5)
                 else:
                     CURRENT_RUNNING_PROCESS.kill()
             except Exception:
@@ -276,7 +276,7 @@ def terminate_all_processes():
         for pid, info in list(BACKGROUND_PROCESSES.items()):
             try:
                 if os.name == "nt":
-                    subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)], capture_output=True)
+                    subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)], stdin=subprocess.DEVNULL, capture_output=True, timeout=5)
                 else:
                     info["process"].kill()
             except Exception:
@@ -303,6 +303,7 @@ def run_powershell(command: str) -> str:
     try:
         proc = subprocess.Popen(
             ["powershell", "-NoProfile", "-NonInteractive", "-Command", command],
+            stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
@@ -336,6 +337,7 @@ def run_background_process(command: str) -> str:
         flags = subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0
         proc = subprocess.Popen(
             ["powershell", "-NoProfile", "-NonInteractive", "-Command", command],
+            stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
@@ -575,7 +577,7 @@ def stop_background_process(pid: int, terminated_by_user: bool = False) -> str:
         info = BACKGROUND_PROCESSES.get(pid)
         if not info:
             if os.name == "nt":
-                res = subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)], capture_output=True, text=True)
+                res = subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)], stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=5)
                 if res.returncode == 0:
                     _record_terminated_output(
                         pid=pid,
@@ -612,7 +614,7 @@ def stop_background_process(pid: int, terminated_by_user: bool = False) -> str:
             )
 
             if os.name == "nt":
-                subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)], capture_output=True)
+                subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)], stdin=subprocess.DEVNULL, capture_output=True, timeout=5)
             else:
                 info["process"].kill()
             del BACKGROUND_PROCESSES[pid]
@@ -1483,9 +1485,26 @@ def _git_env() -> Dict[str, str]:
     env["GIT_TERMINAL_PROMPT"] = "0"
     env["GIT_PAGER"] = "cat"
     env["PAGER"] = "cat"
+    env["GH_PROMPT_DISABLED"] = "1"
+    env["NO_COLOR"] = "1"
     return env
 
 _WIN_NO_WINDOW = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+
+def _run_git_cmd(cmd: List[str], cwd: str, timeout: int = 25) -> subprocess.CompletedProcess:
+    """Executes a git or gh CLI command with DEVNULL stdin and tight timeout to prevent IPC deadlocks."""
+    return subprocess.run(
+        cmd,
+        cwd=cwd,
+        stdin=subprocess.DEVNULL,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        env=_git_env(),
+        creationflags=_WIN_NO_WINDOW,
+        timeout=timeout
+    )
 
 @tool
 def git_init(repo_dir: str = ".") -> str:
@@ -1495,19 +1514,12 @@ def git_init(repo_dir: str = ".") -> str:
         os.makedirs(target, exist_ok=True)
         if os.path.exists(os.path.join(target, ".git")):
             return f"Git repository is already initialized at: {target}"
-        res = subprocess.run(
-            ["git", "init"],
-            cwd=target,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            env=_git_env(),
-            creationflags=_WIN_NO_WINDOW,
-            timeout=15
-        )
+        res = _run_git_cmd(["git", "init", "-b", "main"], cwd=target, timeout=10)
         if res.returncode != 0:
-            return f"Git init failed: {res.stderr.strip() or res.stdout.strip()}"
+            res = _run_git_cmd(["git", "init"], cwd=target, timeout=10)
+            if res.returncode != 0:
+                return f"Git init failed: {res.stderr.strip() or res.stdout.strip()}"
+            _run_git_cmd(["git", "branch", "-M", "main"], cwd=target, timeout=5)
         return f"Successfully initialized empty Git repository at: {target}\n{res.stdout.strip()}"
     except Exception as e:
         return f"Error initializing git repository: {e}"
@@ -1517,17 +1529,10 @@ def git_remote_add(remote_url: str, remote_name: str = "origin", repo_dir: str =
     """Adds or updates a remote git repository URL (e.g. 'https://github.com/user/repo.git')."""
     try:
         target = resolve_path(repo_dir)
-        chk = subprocess.run(
-            ["git", "remote"],
-            cwd=target,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            env=_git_env(),
-            creationflags=_WIN_NO_WINDOW,
-            timeout=10
-        )
+        if not os.path.exists(os.path.join(target, ".git")):
+            return f"Error: Directory '{target}' is not a git repository. Use 'git_init' first."
+
+        chk = _run_git_cmd(["git", "remote"], cwd=target, timeout=8)
         remotes = [r.strip() for r in chk.stdout.splitlines() if r.strip()]
         if remote_name in remotes:
             cmd = ["git", "remote", "set-url", remote_name, remote_url.strip()]
@@ -1536,17 +1541,7 @@ def git_remote_add(remote_url: str, remote_name: str = "origin", repo_dir: str =
             cmd = ["git", "remote", "add", remote_name, remote_url.strip()]
             action = "added"
 
-        res = subprocess.run(
-            cmd,
-            cwd=target,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            env=_git_env(),
-            creationflags=_WIN_NO_WINDOW,
-            timeout=15
-        )
+        res = _run_git_cmd(cmd, cwd=target, timeout=10)
         if res.returncode != 0:
             return f"Git remote failed: {res.stderr.strip() or res.stdout.strip()}"
         return f"Successfully {action} remote '{remote_name}' -> {remote_url.strip()}"
@@ -1558,39 +1553,20 @@ def git_status(repo_dir: str = ".") -> str:
     """Checks git repository status (branch, modified files, untracked files, ahead/behind status)."""
     try:
         target = resolve_path(repo_dir)
-        res = subprocess.run(
-            ["git", "--no-optional-locks", "status", "--short", "--branch"],
-            cwd=target,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            env=_git_env(),
-            creationflags=_WIN_NO_WINDOW,
-            timeout=15
-        )
+        if not os.path.exists(os.path.join(target, ".git")):
+            return f"Directory '{target}' is not a git repository. Use 'git_init' to initialize git here if desired."
+
+        res = _run_git_cmd(["git", "--no-optional-locks", "status", "--short", "--branch"], cwd=target, timeout=10)
         if res.returncode != 0:
             err = res.stderr.strip() or res.stdout.strip()
-            if "not a git repository" in err.lower():
-                return f"Directory '{target}' is not a git repository. Use 'git_init' to initialize git here if desired."
             return f"Git error (exit code {res.returncode}): {err}"
 
         lines = res.stdout.strip().splitlines()
         branch_line = lines[0] if lines else "## No branch info"
         file_lines = lines[1:] if len(lines) > 1 else []
 
-        log_res = subprocess.run(
-            ["git", "--no-pager", "log", "-1", "--oneline"],
-            cwd=target,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            env=_git_env(),
-            creationflags=_WIN_NO_WINDOW,
-            timeout=10
-        )
-        last_commit = log_res.stdout.strip() if log_res.returncode == 0 else "None"
+        log_res = _run_git_cmd(["git", "--no-pager", "log", "-1", "--oneline"], cwd=target, timeout=8)
+        last_commit = log_res.stdout.strip() if log_res.returncode == 0 else "None (no commits yet)"
 
         summary = [
             f"Git Status for: {target}",
@@ -1618,6 +1594,9 @@ def git_diff(filepath: str = "", staged: bool = False, repo_dir: str = ".") -> s
     """Inspects git line-by-line diffs for uncommitted or staged changes. Prevents token overload by limiting output length."""
     try:
         target_dir = resolve_path(repo_dir)
+        if not os.path.exists(os.path.join(target_dir, ".git")):
+            return f"Directory '{target_dir}' is not a git repository."
+
         cmd = ["git", "--no-pager", "diff"]
         if staged:
             cmd.append("--cached")
@@ -1626,17 +1605,7 @@ def git_diff(filepath: str = "", staged: bool = False, repo_dir: str = ".") -> s
             rel_fp = os.path.relpath(clean_fp, target_dir)
             cmd.extend(["--", rel_fp])
 
-        res = subprocess.run(
-            cmd,
-            cwd=target_dir,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            env=_git_env(),
-            creationflags=_WIN_NO_WINDOW,
-            timeout=25
-        )
+        res = _run_git_cmd(cmd, cwd=target_dir, timeout=15)
         if res.returncode != 0:
             err = res.stderr.strip() or res.stdout.strip()
             return f"Git diff error (exit code {res.returncode}): {err}"
@@ -1667,70 +1636,49 @@ def git_commit_and_push(commit_message: str = "", message: str = "", msg: str = 
     """Stages changes, creates a git commit, and pushes to remote repository using configured git credentials."""
     try:
         target_dir = resolve_path(repo_dir)
+        if not os.path.exists(os.path.join(target_dir, ".git")):
+            return f"Error: '{target_dir}' is not a git repository. Call 'git_init' first."
+
         effective_msg = (commit_message or message or msg or "").strip()
         if not effective_msg:
             effective_msg = "Update files via John's Harness"
 
+        # Determine current branch
+        br_res = _run_git_cmd(["git", "branch", "--show-current"], cwd=target_dir, timeout=8)
+        curr_br = br_res.stdout.strip() or branch or "main"
+        if not curr_br:
+            _run_git_cmd(["git", "branch", "-M", "main"], cwd=target_dir, timeout=5)
+            curr_br = "main"
+
+        # Check remote origin
+        rem_chk = _run_git_cmd(["git", "remote"], cwd=target_dir, timeout=8)
+        has_remote = "origin" in [r.strip() for r in rem_chk.stdout.splitlines()]
+
         if add_all:
-            add_res = subprocess.run(
-                ["git", "add", "-A"],
-                cwd=target_dir,
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                env=_git_env(),
-                creationflags=_WIN_NO_WINDOW,
-                timeout=30
-            )
+            add_res = _run_git_cmd(["git", "add", "-A"], cwd=target_dir, timeout=20)
             if add_res.returncode != 0:
                 return f"Git add failed: {add_res.stderr.strip() or add_res.stdout.strip()}"
 
-        commit_res = subprocess.run(
-            ["git", "commit", "-m", effective_msg],
-            cwd=target_dir,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            env=_git_env(),
-            creationflags=_WIN_NO_WINDOW,
-            timeout=30
-        )
+        commit_res = _run_git_cmd(["git", "commit", "-m", effective_msg], cwd=target_dir, timeout=20)
         commit_out = (commit_res.stdout.strip() + "\n" + commit_res.stderr.strip()).strip()
         if commit_res.returncode != 0:
-            if "nothing to commit" in commit_out.lower():
-                return f"Git commit: Nothing to commit (working tree clean).\n{commit_out}"
-            return f"Git commit failed: {commit_out}"
+            if "nothing to commit" not in commit_out.lower():
+                return f"Git commit failed: {commit_out}"
 
-        push_cmd = ["git", "push"]
-        if branch:
-            push_cmd.extend(["origin", branch])
+        if not has_remote:
+            return f"Committed successfully ({effective_msg}), but no remote 'origin' is configured yet. Use 'github_create_repo' or 'git_remote_add' to push to GitHub."
 
-        push_res = subprocess.run(
-            push_cmd,
-            cwd=target_dir,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            env=_git_env(),
-            creationflags=_WIN_NO_WINDOW,
-            timeout=60
-        )
+        push_res = _run_git_cmd(["git", "push", "-u", "origin", curr_br], cwd=target_dir, timeout=30)
         push_out = (push_res.stdout.strip() + "\n" + push_res.stderr.strip()).strip()
         if push_res.returncode != 0:
-            # Auto fallback for missing upstream tracking
-            if "no upstream branch" in push_out.lower() or "set-upstream" in push_out.lower():
-                br_res = subprocess.run(["git", "branch", "--show-current"], cwd=target_dir, capture_output=True, text=True, env=_git_env(), creationflags=_WIN_NO_WINDOW)
-                curr_br = br_res.stdout.strip() or branch or "main"
-                retry_res = subprocess.run(["git", "push", "-u", "origin", curr_br], cwd=target_dir, capture_output=True, text=True, env=_git_env(), creationflags=_WIN_NO_WINDOW, timeout=60)
-                if retry_res.returncode == 0:
-                    return f"Git Commit & Push Successful (upstream set to origin/{curr_br})!\nCommit: {effective_msg}\n{retry_res.stdout.strip()}"
-                push_out += "\n" + retry_res.stderr.strip()
-            return f"Commit succeeded ({effective_msg}), but push failed:\n{push_out}"
+            # Fallback to plain push
+            push_res2 = _run_git_cmd(["git", "push"], cwd=target_dir, timeout=30)
+            if push_res2.returncode == 0:
+                push_out = (push_res2.stdout.strip() + "\n" + push_res2.stderr.strip()).strip()
+            else:
+                return f"Commit succeeded ({effective_msg}), but push failed:\n{push_out}\n{push_res2.stderr.strip()}"
 
-        return f"Git Commit & Push Successful!\nCommit: {effective_msg}\nDetails:\n{commit_out}\n{push_out}".strip()
+        return f"Git Commit & Push Successful (branch: {curr_br})!\nCommit: {effective_msg}\nDetails:\n{commit_out}\n{push_out}".strip()
     except subprocess.TimeoutExpired:
         return "Git operation timed out."
     except Exception as e:
@@ -1744,27 +1692,49 @@ def github_create_repo(repo_name: str = "", name: str = "", private: bool = Fals
         effective_name = (repo_name or name or os.path.basename(target_dir) or "my-app").strip()
         vis_flag = "--private" if private else "--public"
 
-        # Check if remote origin already exists
-        rem_check = subprocess.run(["git", "remote", "-v"], cwd=target_dir, capture_output=True, text=True, env=_git_env(), creationflags=_WIN_NO_WINDOW)
+        # 1. Ensure git repository is initialized
+        if not os.path.exists(os.path.join(target_dir, ".git")):
+            init_res = _run_git_cmd(["git", "init", "-b", "main"], cwd=target_dir, timeout=10)
+            if init_res.returncode != 0:
+                _run_git_cmd(["git", "init"], cwd=target_dir, timeout=10)
+
+        # 2. Ensure main branch
+        _run_git_cmd(["git", "branch", "-M", "main"], cwd=target_dir, timeout=8)
+
+        # 3. Ensure initial commit exists
+        rev_chk = _run_git_cmd(["git", "rev-parse", "HEAD"], cwd=target_dir, timeout=8)
+        if rev_chk.returncode != 0:
+            _run_git_cmd(["git", "add", "-A"], cwd=target_dir, timeout=20)
+            _run_git_cmd(["git", "commit", "-m", f"Initial commit for {effective_name}"], cwd=target_dir, timeout=20)
+        else:
+            st_chk = _run_git_cmd(["git", "status", "--porcelain"], cwd=target_dir, timeout=8)
+            if st_chk.stdout.strip():
+                _run_git_cmd(["git", "add", "-A"], cwd=target_dir, timeout=20)
+                _run_git_cmd(["git", "commit", "-m", "Update project files"], cwd=target_dir, timeout=20)
+
+        # 4. Check if remote origin already exists
+        rem_check = _run_git_cmd(["git", "remote", "-v"], cwd=target_dir, timeout=8)
         if "origin" in rem_check.stdout:
-            push_res = subprocess.run(["git", "push", "-u", "origin", "main"], cwd=target_dir, capture_output=True, text=True, env=_git_env(), creationflags=_WIN_NO_WINDOW, timeout=40)
+            push_res = _run_git_cmd(["git", "push", "-u", "origin", "main"], cwd=target_dir, timeout=30)
             return f"Project is already connected to GitHub repository. Pushed latest code to origin/main.\n{push_res.stdout.strip() or push_res.stderr.strip()}"
 
+        # 5. Create repo via GitHub CLI
         cmd = ["gh", "repo", "create", effective_name, vis_flag, "--source=.", "--remote=origin", "--push"]
-        res = subprocess.run(
-            cmd,
-            cwd=target_dir,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            env=_git_env(),
-            creationflags=_WIN_NO_WINDOW,
-            timeout=60
-        )
+        res = _run_git_cmd(cmd, cwd=target_dir, timeout=35)
         out = (res.stdout.strip() + "\n" + res.stderr.strip()).strip()
+
+        # 6. Auto-recovery if repo already exists on user's GitHub account
         if res.returncode != 0:
+            if "already exists" in out.lower():
+                user_res = _run_git_cmd(["gh", "api", "user", "-q", ".login"], cwd=target_dir, timeout=10)
+                username = user_res.stdout.strip()
+                if username:
+                    remote_url = f"https://github.com/{username}/{effective_name}.git"
+                    _run_git_cmd(["git", "remote", "add", "origin", remote_url], cwd=target_dir, timeout=8)
+                    push_res = _run_git_cmd(["git", "push", "-u", "origin", "main"], cwd=target_dir, timeout=30)
+                    return f"Repository '{effective_name}' already existed on GitHub. Connected remote ({remote_url}) and pushed to origin/main.\n{push_res.stdout.strip() or push_res.stderr.strip()}"
             return f"GitHub repo creation failed:\n{out}"
+
         return f"Successfully created GitHub repository '{effective_name}' and pushed code!\n{out}"
     except Exception as e:
         return f"Error creating GitHub repository: {e}"
@@ -1774,17 +1744,7 @@ def github_repo_info(repo_dir: str = ".") -> str:
     """Returns details and URLs of the connected GitHub repository using the GitHub CLI (gh)."""
     try:
         target_dir = resolve_path(repo_dir)
-        res = subprocess.run(
-            ["gh", "repo", "view", "--json", "name,owner,url,visibility,isPrivate"],
-            cwd=target_dir,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            env=_git_env(),
-            creationflags=_WIN_NO_WINDOW,
-            timeout=15
-        )
+        res = _run_git_cmd(["gh", "repo", "view", "--json", "name,owner,url,visibility,isPrivate"], cwd=target_dir, timeout=10)
         if res.returncode != 0:
             err = res.stderr.strip() or res.stdout.strip()
             return f"GitHub repo info unavailable: {err}"
