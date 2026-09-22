@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 Autonomous Cloud Scraper: quotes_scraper
-Target: http://quotes.toscrape.com
-Criteria: Scrape top quotes, authors, and tags from quotes.toscrape.com. Store them and format into a digest for alerting.
+Target: https://quotes.toscrape.com
+Criteria: Scrape quotes from quotes.toscrape.com, extract quote text, author, and tags, and check for new quotes or specific criteria.
 Scheduled via GitHub Actions (Cron: 0 */3 * * *)
 """
 import os
@@ -13,8 +13,8 @@ import urllib.request
 import urllib.parse
 from datetime import datetime
 
-TARGET_URL = "http://quotes.toscrape.com"
-CRITERIA = "Scrape top quotes, authors, and tags from quotes.toscrape.com. Store them and format into a digest for alerting."
+TARGET_URL = "https://quotes.toscrape.com"
+CRITERIA = "Scrape quotes from quotes.toscrape.com, extract quote text, author, and tags, and check for new quotes or specific criteria."
 DATA_FILE = os.path.join(os.path.dirname(__file__), "data", "quotes_scraper_results.json")
 
 def send_telegram(text: str):
