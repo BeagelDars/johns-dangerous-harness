@@ -116,9 +116,15 @@ const cloudScriptCode = document.getElementById('cloudScriptCode');
 const statFilesCount = document.getElementById('statFilesCount');
 const statTotalBytes = document.getElementById('statTotalBytes');
 const cloudFilesList = document.getElementById('cloudFilesList');
+const cloudDataFilename = document.getElementById('cloudDataFilename');
+const cloudDataCount = document.getElementById('cloudDataCount');
+const openExternalDataBtn = document.getElementById('openExternalDataBtn');
+const copyCloudDataBtn = document.getElementById('copyCloudDataBtn');
+const cloudDataCode = document.getElementById('cloudDataCode');
 
 let cachedCloudData = null;
 let activeCloudScriptPath = null;
+let currentDatasetPath = null;
 
 let activeBackgroundTasks = [];
 let inspectedTaskId = null;
@@ -2993,13 +2999,13 @@ function renderCloudTasksData(data) {
         item.addEventListener('click', () => {
           cloudScriptsList.querySelectorAll('.cloud-script-item').forEach(el => el.classList.remove('active'));
           item.classList.add('active');
-          loadScriptSource(scr.path, scr.file);
+          loadScriptSource(scr.path, scr.file, scr.abs_path);
         });
         cloudScriptsList.appendChild(item);
       });
 
       if (scrapers.length > 0) {
-        loadScriptSource(scrapers[0].path, scrapers[0].file);
+        loadScriptSource(scrapers[0].path, scrapers[0].file, scrapers[0].abs_path);
       }
     }
   }
@@ -3014,45 +3020,111 @@ function renderCloudTasksData(data) {
     cloudFilesList.innerHTML = '';
     if (savedData.length === 0) {
       cloudFilesList.innerHTML = `<div class="cloud-empty-state">No scraped datasets in scrapers/data/ yet. When scrapers finish, extracted datasets will appear here.</div>`;
+      if (cloudDataFilename) cloudDataFilename.textContent = 'No datasets available';
+      if (cloudDataCode) cloudDataCode.textContent = '// No scraped datasets yet';
+      if (cloudDataCount) cloudDataCount.style.display = 'none';
     } else {
-      savedData.forEach(f => {
-        const frow = document.createElement('div');
-        frow.className = 'cloud-file-row';
-        frow.innerHTML = `
-          <span class="cloud-file-name">${escapeHtml(f.file)}</span>
-          <div class="cloud-file-meta">
-            <span>${formatBytes(f.size_bytes || 0)}</span>
-            <button class="cloud-action-btn-sm" title="Open file in editor">Open</button>
-          </div>
+      savedData.forEach((f, idx) => {
+        const item = document.createElement('div');
+        item.className = `cloud-data-item ${idx === 0 ? 'active' : ''}`;
+        item.innerHTML = `
+          <span class="cloud-data-item-name" title="${escapeHtml(f.file)}">${escapeHtml(f.file)}</span>
+          <span class="cloud-data-item-size">${formatBytes(f.size_bytes || 0)}</span>
         `;
-        const openBtn = frow.querySelector('button');
-        if (openBtn) {
-          openBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            if (f.path && window.harness && window.harness.openFile) {
-              window.harness.openFile(f.path);
-            }
-          });
-        }
-        cloudFilesList.appendChild(frow);
+        item.addEventListener('click', () => {
+          cloudFilesList.querySelectorAll('.cloud-data-item').forEach(el => el.classList.remove('active'));
+          item.classList.add('active');
+          loadDatasetPreview(f.path, f.file, f.abs_path);
+        });
+        cloudFilesList.appendChild(item);
       });
+
+      if (savedData.length > 0) {
+        loadDatasetPreview(savedData[0].path, savedData[0].file, savedData[0].abs_path);
+      }
     }
   }
 }
 
-function loadScriptSource(filePath, fileName) {
+function loadDatasetPreview(filePath, fileName, absPath) {
+  currentDatasetPath = absPath || filePath;
+  if (cloudDataFilename) cloudDataFilename.textContent = fileName || 'Dataset';
+  if (cloudDataCode) cloudDataCode.textContent = '// Loading dataset content...';
+  if (cloudDataCount) cloudDataCount.style.display = 'none';
+
+  const targetPath = absPath || filePath;
+  if (targetPath && window.harness && window.harness.readFilePreview) {
+    window.harness.readFilePreview(targetPath).then(res => {
+      if (res && res.text) {
+        try {
+          const parsed = JSON.parse(res.text);
+          const pretty = JSON.stringify(parsed, null, 2);
+          if (cloudDataCode) cloudDataCode.textContent = pretty;
+
+          let count = 0;
+          if (Array.isArray(parsed)) {
+            count = parsed.length;
+          } else if (parsed && typeof parsed === 'object') {
+            if (Array.isArray(parsed.items)) count = parsed.items.length;
+            else if (Array.isArray(parsed.results)) count = parsed.results.length;
+            else if (parsed.total_items) count = parsed.total_items;
+            else count = Object.keys(parsed).length;
+          }
+
+          if (cloudDataCount) {
+            cloudDataCount.style.display = 'inline-block';
+            cloudDataCount.textContent = `${count} record${count === 1 ? '' : 's'}`;
+          }
+        } catch (e) {
+          if (cloudDataCode) cloudDataCode.textContent = res.text;
+        }
+      } else {
+        if (cloudDataCode) cloudDataCode.textContent = `// Empty or unreadable file: ${targetPath}`;
+      }
+    }).catch(err => {
+      if (cloudDataCode) cloudDataCode.textContent = `// Error loading file: ${err.message || err}`;
+    });
+  }
+}
+
+if (openExternalDataBtn) {
+  openExternalDataBtn.addEventListener('click', () => {
+    if (currentDatasetPath && window.harness && window.harness.openFile) {
+      window.harness.openFile(currentDatasetPath);
+      const prev = openExternalDataBtn.textContent;
+      openExternalDataBtn.textContent = 'opened!';
+      setTimeout(() => { openExternalDataBtn.textContent = prev; }, 1500);
+    }
+  });
+}
+
+if (copyCloudDataBtn) {
+  copyCloudDataBtn.addEventListener('click', () => {
+    const text = cloudDataCode ? cloudDataCode.innerText : '';
+    if (text) {
+      navigator.clipboard.writeText(text).then(() => {
+        copyCloudDataBtn.textContent = 'copied!';
+        setTimeout(() => { copyCloudDataBtn.textContent = 'copy json'; }, 1500);
+      });
+    }
+  });
+}
+
+function loadScriptSource(filePath, fileName, absPath) {
+  activeCloudScriptPath = absPath || filePath;
   if (cloudScriptFilename) cloudScriptFilename.textContent = fileName || 'Script';
   if (cloudScriptCode) cloudScriptCode.textContent = '# Loading script source...';
-  if (filePath) {
+  const targetPath = absPath || filePath;
+  if (targetPath) {
     if (window.harness && window.harness.readFilePreview) {
-      window.harness.readFilePreview(filePath).then(res => {
+      window.harness.readFilePreview(targetPath).then(res => {
         if (res && res.text) {
           if (cloudScriptCode) cloudScriptCode.textContent = res.text;
         } else {
-          if (cloudScriptCode) cloudScriptCode.textContent = `# Source path: ${filePath}`;
+          if (cloudScriptCode) cloudScriptCode.textContent = `# Source path: ${targetPath}`;
         }
       }).catch(() => {
-        if (cloudScriptCode) cloudScriptCode.textContent = `# Source path: ${filePath}`;
+        if (cloudScriptCode) cloudScriptCode.textContent = `# Source path: ${targetPath}`;
       });
     }
   }

@@ -353,32 +353,82 @@ ipcMain.handle('media:save_attachment', async (event, { filename, base64Data, wo
 
 ipcMain.handle('media:read_file_preview', async (event, { filePath }) => {
   try {
-    if (!filePath || !fs.existsSync(filePath)) return null;
-    const ext = path.extname(filePath).toLowerCase();
+    if (!filePath) return null;
+    let resolved = filePath;
+    if (!path.isAbsolute(resolved)) {
+      const candidates = [
+        getProjectRoot(),
+        process.cwd(),
+        'C:\\Users\\User\\Downloads\\Johns dangerous harness',
+        path.join(getProjectRoot(), '..')
+      ];
+      for (const dir of candidates) {
+        const full = path.join(dir, resolved);
+        if (fs.existsSync(full)) {
+          resolved = full;
+          break;
+        }
+      }
+    }
+    if (!fs.existsSync(resolved)) return null;
+
+    const ext = path.extname(resolved).toLowerCase();
     const isImage = ['.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp', '.svg'].includes(ext);
-    const stat = fs.statSync(filePath);
+    const stat = fs.statSync(resolved);
     let base64Preview = null;
+    let textContent = null;
+
     if (isImage && stat.size <= 25 * 1024 * 1024) {
-      const buf = fs.readFileSync(filePath);
+      const buf = fs.readFileSync(resolved);
       const mime = ext === '.svg' ? 'image/svg+xml' : (ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : `image/${ext.slice(1)}`);
       base64Preview = `data:${mime};base64,${buf.toString('base64')}`;
+    } else if (!isImage && stat.size <= 10 * 1024 * 1024) {
+      textContent = fs.readFileSync(resolved, 'utf-8');
     }
+
     return {
-      path: filePath,
-      name: path.basename(filePath),
+      path: resolved,
+      name: path.basename(resolved),
       size: stat.size,
       isImage,
-      preview: base64Preview
+      preview: base64Preview,
+      text: textContent
     };
   } catch (e) {
+    console.error('Failed to read file preview:', e);
     return null;
   }
 });
 
 ipcMain.handle('media:open_file', async (event, { filePath }) => {
-  if (filePath && fs.existsSync(filePath)) {
-    shell.openPath(filePath);
-    return true;
+  try {
+    if (!filePath) return false;
+    let resolved = filePath;
+    if (!path.isAbsolute(resolved)) {
+      const candidates = [
+        getProjectRoot(),
+        process.cwd(),
+        'C:\\Users\\User\\Downloads\\Johns dangerous harness',
+        path.join(getProjectRoot(), '..')
+      ];
+      for (const dir of candidates) {
+        const full = path.join(dir, resolved);
+        if (fs.existsSync(full)) {
+          resolved = full;
+          break;
+        }
+      }
+    }
+    if (fs.existsSync(resolved)) {
+      const err = await shell.openPath(resolved);
+      if (err) {
+        console.warn(`shell.openPath warning for ${resolved}: ${err}, attempting shell.showItemInFolder`);
+        shell.showItemInFolder(resolved);
+      }
+      return true;
+    }
+  } catch (err) {
+    console.error('Failed to open file:', err);
   }
   return false;
 });

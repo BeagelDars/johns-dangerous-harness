@@ -1,0 +1,36 @@
+name: wittenberge-land-scraper (24/7 Scraper)
+
+on:
+  schedule:
+    - cron: '0 */4 * * *'
+  workflow_dispatch:
+
+jobs:
+  scrape_and_notify:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Run Scraper
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          python scrapers/wittenberge-land-scraper.py
+
+      - name: Upload Scraped Results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: wittenberge-land-scraper-results
+          path: scrapers/data/
+          retention-days: 14

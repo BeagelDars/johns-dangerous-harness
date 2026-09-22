@@ -1938,6 +1938,7 @@ def gh_list_workflows(repo_dir: str = ".") -> str:
                                 scrapers.append({
                                     "file": sname,
                                     "path": os.path.relpath(spath, repo_root).replace("\\", "/"),
+                                    "abs_path": spath.replace("\\", "/"),
                                     "size_bytes": os.path.getsize(spath)
                                 })
 
@@ -1963,6 +1964,7 @@ def gh_list_workflows(repo_dir: str = ".") -> str:
                                 saved_data.append({
                                     "file": dname,
                                     "path": os.path.relpath(dpath, repo_root).replace("\\", "/"),
+                                    "abs_path": dpath.replace("\\", "/"),
                                     "size_bytes": os.path.getsize(dpath),
                                     "modified": datetime.fromtimestamp(os.path.getmtime(dpath)).isoformat()
                                 })

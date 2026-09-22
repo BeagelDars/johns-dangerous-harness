@@ -362,8 +362,23 @@
               <span class="stat-label">Total Storage Used</span>
             </div>
           </div>
-          <div class="cloud-files-list" id="cloudFilesList">
-            <div class="cloud-empty-state">No scraped datasets in scrapers/data/ yet.</div>
+          <div class="cloud-data-grid">
+            <div class="cloud-data-sidebar" id="cloudFilesList">
+              <div class="cloud-empty-state">No scraped datasets in scrapers/data/ yet.</div>
+            </div>
+            <div class="cloud-data-viewer">
+              <div class="cloud-data-header">
+                <div class="cloud-data-header-left">
+                  <span id="cloudDataFilename">Select a dataset to preview</span>
+                  <span id="cloudDataCount" class="cloud-count-pill" style="display: none;">0 items</span>
+                </div>
+                <div class="cloud-data-header-actions">
+                  <button class="copy-btn" id="openExternalDataBtn" title="Open file in system default editor">open in editor</button>
+                  <button class="copy-btn" id="copyCloudDataBtn">copy json</button>
+                </div>
+              </div>
+              <pre class="cloud-data-code" id="cloudDataCode"><code>// Select a dataset from the list to preview scraped records</code></pre>
+            </div>
           </div>
         </div>
       </div>
