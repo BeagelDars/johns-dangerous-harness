@@ -361,3 +361,15 @@ ipcMain.handle('media:open_file', async (event, { filePath }) => {
   }
   return false;
 });
+
+ipcMain.handle('app:open_external', async (event, url) => {
+  try {
+    if (typeof url === 'string' && (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('mailto:'))) {
+      await shell.openExternal(url);
+      return true;
+    }
+  } catch (err) {
+    console.error('Failed to open external URL:', err);
+  }
+  return false;
+});

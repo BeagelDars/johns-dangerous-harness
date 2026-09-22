@@ -2618,7 +2618,7 @@ document.addEventListener('click', (e) => {
     if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('mailto:')) {
       e.preventDefault();
       if (window.harness && window.harness.openExternal) {
-        window.harness.openExternal(url);
+        window.harness.openExternal(url).catch(() => {});
       }
     }
   }

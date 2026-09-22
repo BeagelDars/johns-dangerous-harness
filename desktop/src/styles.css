@@ -1211,6 +1211,36 @@ body {
 }
 
 /* -------------------------------------------------------------
+   Markdown & Message Links (Claude Warm Terracotta Aesthetic)
+   ------------------------------------------------------------- */
+a,
+.markdown-body a {
+  color: var(--accent-claude);
+  text-decoration: underline;
+  text-decoration-color: rgba(217, 119, 87, 0.45);
+  text-underline-offset: 3px;
+  font-weight: 500;
+  transition: color 0.15s ease, text-decoration-color 0.15s ease;
+  cursor: pointer;
+}
+
+a:hover,
+.markdown-body a:hover {
+  color: var(--accent-claude-hover);
+  text-decoration-color: var(--accent-claude-hover);
+}
+
+a:visited,
+.markdown-body a:visited {
+  color: var(--accent-claude);
+}
+
+a:active,
+.markdown-body a:active {
+  color: #f59e82;
+}
+
+/* -------------------------------------------------------------
    Bottom Input Area
    ------------------------------------------------------------- */
 .input-container {

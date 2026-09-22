@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer, shell } = require('electron');
+const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('harness', {
   sendQuery: (text, attachments = []) => ipcRenderer.send('agent:query', { text, attachments }),
@@ -23,7 +23,7 @@ contextBridge.exposeInMainWorld('harness', {
   getBackgroundTasks: () => ipcRenderer.send('tasks:get'),
   stopProcess: (pid) => ipcRenderer.send('tasks:stop', { pid }),
   getProcessOutput: (pid) => ipcRenderer.send('tasks:get_output', { pid }),
-  openExternal: (url) => shell.openExternal(url),
+  openExternal: (url) => ipcRenderer.invoke('app:open_external', url),
   onEvent: (callback) => {
     const handler = (event, data) => callback(data);
     ipcRenderer.on('agent:event', handler);
