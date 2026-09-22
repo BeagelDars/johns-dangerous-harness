@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>John's Harness</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="marked.min.js"></script>
+</head>
+<body>
+  <div class="app-layout">
+    <!-- Sleek Minimal Header -->
+    <header class="app-header">
+      <div class="header-left">
+        <button class="btn-ghost toggle-sidebar-btn" id="toggleSidebarBtn" title="Toggle Projects Sidebar (Ctrl+B)">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="3" y1="12" x2="21" y2="12"></line>
+            <line x1="3" y1="6" x2="21" y2="6"></line>
+            <line x1="3" y1="18" x2="21" y2="18"></line>
+          </svg>
+        </button>
+        <button class="project-pill" id="projectPill" title="Switch active project folder">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+          </svg>
+          <span id="projectNameLabel">Johns dangerous harness</span>
+        </button>
+      </div>
+
+      <div class="header-right">
+        <!-- Segmented Control -->
+        <div class="segmented-control" role="group">
+          <button class="seg-btn active" data-mode="auto">Auto</button>
+          <button class="seg-btn" data-mode="gemini">Gemini</button>
+          <button class="seg-btn" data-mode="local">Local</button>
+        </div>
+
+        <div class="steps-picker">
+          <select id="stepsInput" title="Max reasoning steps">
+            <option value="15">15</option>
+            <option value="25" selected>25</option>
+            <option value="40">40</option>
+            <option value="60">60</option>
+          </select>
+        </div>
+
+        <button class="btn-ghost" id="clearBtn" title="Clear chat history">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Split Workspace -->
+    <div class="workspace" id="workspace">
+      <!-- Collapsible Left Sidebar (Antigravity / Projects Storage) -->
+      <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+          <button class="sidebar-new-btn" id="newChatBtn" title="Start a fresh conversation">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+            <span>New Conversation</span>
+          </button>
+        </div>
+
+        <div class="sidebar-section-title">
+          <span>PROJECTS & SESSIONS</span>
+          <button class="btn-ghost-sm" id="refreshProjectsBtn" title="Refresh Projects">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="23 4 23 10 17 10"></polyline>
+              <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+            </svg>
+          </button>
+        </div>
+
+        <div class="sidebar-scroll" id="projectsTree">
+          <!-- Populated dynamically: project groups with sessions -->
+        </div>
+
+        <div class="sidebar-footer">
+          <button class="sidebar-footer-btn" id="addProjectBtn" title="Open or create project folder">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+            </svg>
+            <span>Open Project...</span>
+          </button>
+        </div>
+      </aside>
+
+      <!-- Main Chat Stream -->
+      <section class="chat-column" id="chatColumn">
+        <!-- Antigravity Background Tasks Widget Bar -->
+        <div class="tasks-bar-container" id="tasksBarContainer" style="display: none;">
+          <div class="tasks-bar" id="tasksBar">
+            <button class="tasks-bar-toggle" id="tasksBarToggle" title="Toggle active background tasks">
+              <div class="tasks-bar-left">
+                <span class="tasks-pulse-dot"></span>
+                <span class="tasks-count-label" id="tasksCountLabel">1 task running</span>
+              </div>
+              <div class="tasks-bar-right">
+                <svg class="tasks-chevron" id="tasksChevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                  <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
+              </div>
+            </button>
+            <div class="tasks-drawer" id="tasksDrawer" style="display: none;">
+              <div class="tasks-drawer-header">
+                <span>ACTIVE BACKGROUND PROCESSES</span>
+                <span class="tasks-drawer-hint">Click row to inspect output</span>
+              </div>
+              <div class="tasks-list" id="tasksList">
+                <!-- Dynamically populated background tasks -->
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <main class="chat-container" id="chatContainer">
+          <!-- Welcome Hero -->
+          <div class="welcome-hero" id="welcomeHero">
+            <div class="hero-brand">agent</div>
+            <div class="suggestion-grid">
+              <button class="suggestion-card" data-prompt="Search the web for the newest frontier AI models in 2026 and summarize their benchmarks.">
+                <span class="sugg-tag">web</span>
+                <span class="sugg-title">Frontier Model Benchmarks</span>
+              </button>
+              <button class="suggestion-card" data-prompt="Find any documents or Word files related to 'ЕГЭ' in my OneDrive and summarize them.">
+                <span class="sugg-tag">docs</span>
+                <span class="sugg-title">Scan Russian Study Docs</span>
+              </button>
+              <button class="suggestion-card" data-prompt="Inspect the image 'ДВОЙНЫЕ СОЮЗЫ 10.png' in my russian folder and extract the grammar rules.">
+                <span class="sugg-tag">vision</span>
+                <span class="sugg-title">Vision & Handwriting OCR</span>
+              </button>
+              <button class="suggestion-card" data-prompt="Find all python files in the current workspace and search for DEFAULT_PROFILE.">
+                <span class="sugg-tag">grep</span>
+                <span class="sugg-title">Deep Computer Search</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Message feed -->
+          <div class="messages-list" id="messagesList"></div>
+        </main>
+
+        <!-- Bottom Input Area -->
+        <footer class="input-container">
+          <div class="input-card" id="inputCard">
+            <!-- Attached Media / Files Preview Chips Container -->
+            <div class="attachments-preview" id="attachmentsPreview" style="display: none;"></div>
+            <div class="input-row">
+              <button id="attachBtn" class="attach-btn" title="Attach file or screenshot (+)">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="12" y1="5" x2="12" y2="19"></line>
+                  <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+              </button>
+              <textarea
+                id="userInput"
+                placeholder="Message agent or paste screenshot (Ctrl+V)..."
+                rows="1"
+              ></textarea>
+              <button id="sendBtn" class="send-btn" title="Send">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                  <line x1="12" y1="19" x2="12" y2="5"></line>
+                  <polyline points="5 12 12 5 19 12"></polyline>
+                </svg>
+              </button>
+            </div>
+          </div>
+        </footer>
+      </section>
+
+      <!-- Right-Side Inspector Drawer / Panel -->
+      <aside class="inspector-panel" id="inspectorPanel" style="display: none;">
+        <!-- Draggable Edge Resizer -->
+        <div class="inspector-resizer" id="inspectorResizer" title="Drag to resize"></div>
+
+        <div class="inspector-header">
+          <div class="inspector-meta">
+            <span class="inspector-tool-name" id="inspectorToolName">tool_name</span>
+            <span class="inspector-badge" id="inspectorStatus">completed</span>
+          </div>
+          <button class="btn-ghost" id="closeInspectorBtn" title="Close (Esc)">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
+
+        <div class="inspector-content">
+          <!-- Command / Arguments Section -->
+          <div class="inspector-section">
+            <div class="section-bar">
+              <span class="section-title" id="inspectorArgsTitle">command / input</span>
+              <button class="copy-btn" id="copyArgsBtn" title="Copy input">copy</button>
+            </div>
+            <pre class="inspector-code" id="inspectorArgsCode"><code>{}</code></pre>
+          </div>
+
+          <!-- Execution Output Section -->
+          <div class="inspector-section flex-grow">
+            <div class="section-bar">
+              <span class="section-title">output</span>
+              <button class="copy-btn" id="copyOutputBtn" title="Copy output">copy</button>
+            </div>
+            <pre class="inspector-code terminal-view" id="inspectorOutputCode"><code>[No output]</code></pre>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <!-- Minimalist Lightbox Modal for Screenshots / Images -->
+  <div class="image-lightbox" id="imageLightbox" style="display: none;">
+    <div class="lightbox-backdrop" id="lightboxBackdrop"></div>
+    <div class="lightbox-dialog">
+      <div class="lightbox-header">
+        <span class="lightbox-filename" id="lightboxFilename">image.png</span>
+        <div class="lightbox-actions">
+          <button class="btn-ghost-sm" id="lightboxOpenExternalBtn" title="Open in default application">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+              <polyline points="15 3 21 3 21 9"></polyline>
+              <line x1="10" y1="14" x2="21" y2="3"></line>
+            </svg>
+            <span>Open</span>
+          </button>
+          <button class="btn-ghost-sm" id="lightboxCloseBtn" title="Close (Esc)">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div class="lightbox-body">
+        <img id="lightboxImg" src="" alt="Full view" />
+      </div>
+    </div>
+  </div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>

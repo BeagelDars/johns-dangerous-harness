@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How Much Bobik Are You? 🐕</title>
+    <style>
+        :root {
+            --primary: #f59e0b;
+            --primary-dark: #d97706;
+            --bg-gradient: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+            --card-bg: #ffffff;
+            --text-color: #1f2937;
+            --subtext: #4b5563;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: var(--bg-gradient);
+            color: var(--text-color);
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        .container {
+            background: var(--card-bg);
+            padding: 2.5rem;
+            border-radius: 20px;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 440px;
+            text-align: center;
+            box-sizing: border-box;
+            transform: translateY(0);
+            transition: transform 0.3s ease;
+        }
+
+        .container:hover {
+            transform: translateY(-3px);
+        }
+
+        h1 {
+            margin-top: 0;
+            color: var(--primary-dark);
+            font-size: 1.8rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .subtitle {
+            color: var(--subtext);
+            font-size: 0.95rem;
+            margin-bottom: 2rem;
+        }
+
+        .input-group {
+            margin-bottom: 1.25rem;
+            text-align: left;
+        }
+
+        label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            font-size: 0.9rem;
+            color: var(--text-color);
+        }
+
+        input, select {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            border: 2px solid #e5e7eb;
+            border-radius: 10px;
+            font-size: 1rem;
+            box-sizing: border-box;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            outline: none;
+            background: #f9fafb;
+        }
+
+        input:focus, select:focus {
+            border-color: var(--primary);
+            background: #ffffff;
+            box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.15);
+        }
+
+        button {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 0.85rem 1.5rem;
+            font-size: 1.05rem;
+            font-weight: 700;
+            border-radius: 10px;
+            cursor: pointer;
+            width: 100%;
+            margin-top: 1rem;
+            transition: background 0.2s, transform 0.1s;
+            box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
+        }
+
+        button:hover {
+            background: var(--primary-dark);
+        }
+
+        button:active {
+            transform: scale(0.98);
+        }
+
+        .result-card {
+            display: none;
+            margin-top: 2rem;
+            padding-top: 1.5rem;
+            border-top: 2px dashed #e5e7eb;
+            animation: fadeIn 0.5s ease forwards;
+        }
+
+        .percentage {
+            font-size: 3rem;
+            font-weight: 800;
+            color: var(--primary-dark);
+            margin: 0.5rem 0;
+        }
+
+        .dog-archetype {
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: var(--text-color);
+            margin-bottom: 0.75rem;
+        }
+
+        .description {
+            font-size: 0.95rem;
+            color: var(--subtext);
+            line-height: 1.5;
+        }
+
+        .dog-icon {
+            font-size: 3.5rem;
+            margin-bottom: 0.25rem;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <div class="dog-icon">🐕</div>
+        <h1>Bobik Calculator</h1>
+        <p class="subtitle">Discover your true canine coefficient based on age & favorite color!</p>
+
+        <div class="input-group">
+            <label for="age">Your Age:</label>
+            <input type="number" id="age" min="0" max="120" placeholder="e.g. 25">
+        </div>
+
+        <div class="input-group">
+            <label for="color">Favorite Color:</label>
+            <select id="color">
+                <option value="" disabled selected>Select your favorite color...</option>
+                <option value="yellow">💛 Yellow (Sun & Treats)</option>
+                <option value="red">❤️ Red (Speed & Fire)</option>
+                <option value="blue">💙 Blue (Sky & Water)</option>
+                <option value="green">💚 Green (Grass & Parks)</option>
+                <option value="purple">💜 Purple (Royal Bobik)</option>
+                <option value="black">🖤 Black (Stealth Ninja)</option>
+                <option value="pink">🩷 Pink (Playful Fluff)</option>
+            </select>
+        </div>
+
+        <button onclick="calculateBobik()">Calculate Bobikness!</button>
+
+        <div class="result-card" id="resultCard">
+            <div class="dog-archetype" id="archetypeTitle"></div>
+            <div class="percentage" id="percentageResult">0%</div>
+            <p class="description" id="resultDescription"></p>
+        </div>
+    </div>
+
+    <script>
+        function calculateBobik() {
+            const ageInput = document.getElementById('age').value;
+            const colorSelect = document.getElementById('color').value;
+            const resultCard = document.getElementById('resultCard');
+            const percentageResult = document.getElementById('percentageResult');
+            const archetypeTitle = document.getElementById('archetypeTitle');
+            const resultDescription = document.getElementById('resultDescription');
+
+            if (ageInput === '' || isNaN(ageInput)) {
+                alert('Please enter a valid age!');
+                return;
+            }
+
+            if (!colorSelect) {
+                alert('Please select your favorite color!');
+                return;
+            }
+
+            const age = parseInt(ageInput);
+
+            // Base Bobik formula using age
+            let baseBobik;
+            if (age <= 5) {
+                baseBobik = 95 - (age * 2); // Extremely puppy bobik
+            } else if (age <= 18) {
+                baseBobik = 85 - (age * 1.5); // Energetic adolescent bobik
+            } else if (age <= 40) {
+                baseBobik = 60 + (age % 25); // Peak working bobik
+            } else if (age <= 70) {
+                baseBobik = 50 + (age % 30); // Distinguished vintage bobik
+            } else {
+                baseBobik = 99; // Wise ancient supreme bobik sage
+            }
+
+            // Favorite color bonus/modifier
+            let colorModifier = 0;
+            let colorNote = "";
+            switch(colorSelect) {
+                case 'yellow':
+                    colorModifier = 15;
+                    colorNote = " Yellow radiates pure golden retriever energy!";
+                    break;
+                case 'green':
+                    colorModifier = 12;
+                    colorNote = " Green screams fresh cut park grass and zoomies!";
+                    break;
+                case 'red':
+                    colorModifier = 8;
+                    colorNote = " Red adds high-octane chasing speed!";
+                    break;
+                case 'blue':
+                    colorModifier = 5;
+                    colorNote = " Blue brings calm lake-swimming serenity.";
+                    break;
+                case 'purple':
+                    colorModifier = 20;
+                    colorNote = " Purple unlocks elite Royal Bobik royalty status!";
+                    break;
+                case 'black':
+                    colorModifier = 3;
+                    colorNote = " Black gives stealth nighttime raccoon-watching vibes.";
+                    break;
+                case 'pink':
+                    colorModifier = 10;
+                    colorNote = " Pink adds maximum squeaky-toy enthusiasm!";
+                    break;
+            }
+
+            let finalBobik = Math.round(baseBobik + colorModifier);
+            
+            // Clamp between 1% and 100%
+            if (finalBobik > 100) finalBobik = 100;
+            if (finalBobik < 1) finalBobik = 1;
+
+            // Assign Archetype
+            let title = "";
+            let desc = "";
+
+            if (finalBobik >= 90) {
+                title = "👑 Supreme Alpha Bobik";
+                desc = `You are the ultimate embodiment of Bobik! With an age of ${age} and a love for ${colorSelect}, you lead the pack with unmatched loyalty and tail-wagging wisdom.${colorNote}`;
+            } else if (finalBobik >= 75) {
+                title = "⚡ Hyper Zoomies Bobik";
+                desc = `You've got intense Bobik energy! At ${age} years old, your choice of ${colorSelect} keeps you sprinting around the living room rug for no apparent reason.${colorNote}`;
+            } else if (finalBobik >= 50) {
+                title = "🛋️ Couch Potato Bobik";
+                desc = `Balanced and dignified. At ${age} with a ${colorSelect} preference, you know when to chase the ball and when it's time for a 4-hour nap in the sun beam.${colorNote}`;
+            } else if (finalBobik >= 25) {
+                title = "🧐 Distinguished Canine Connoisseur";
+                desc = `You have subtle Bobik undertones. At ${age} years wise, your ${colorSelect} palette suggests you prefer gourmet treats over standard kibble.${colorNote}`;
+            } else {
+                title = "🐱 Secretly a Cat Bobik";
+                desc = `Only ${finalBobik}% Bobik! At ${age} with a ${colorSelect} preference, you might occasionally meow, knock things off tables, or disdain belly rubs.${colorNote}`;
+            }
+
+            archetypeTitle.innerText = title;
+            percentageResult.innerText = finalBobik + "% Bobik";
+            resultDescription.innerText = desc;
+            resultCard.style.display = 'block';
+        }
+    </script>
+</body>
+</html>

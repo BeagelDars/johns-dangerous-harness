@@ -1,0 +1,31 @@
+{
+  "name": "johns-dangerous-harness",
+  "version": "1.0.0",
+  "description": "John's Dangerous Harness Desktop AI Agent",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder"
+  },
+  "author": "John",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^35.0.0",
+    "electron-builder": "^25.1.8",
+    "electron-packager": "^17.1.2"
+  },
+  "build": {
+    "appId": "com.john.dangerous.harness",
+    "productName": "Johns Harness",
+    "win": {
+      "target": "portable"
+    },
+    "directories": {
+      "output": "dist"
+    }
+  },
+  "dependencies": {
+    "marked": "^18.0.13"
+  }
+}

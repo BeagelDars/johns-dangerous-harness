@@ -1,0 +1,23 @@
+# Dependencies
+node_modules/
+desktop/node_modules/
+
+# Build artifacts and distributions
+dist/
+build/
+*.exe
+
+# Python caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.env
+.env*
+.key
+.venv/
+env/
+
+# Harness local data
+.harness/
+.trash/
+*.log
