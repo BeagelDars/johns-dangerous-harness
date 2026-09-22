@@ -2961,7 +2961,7 @@ function renderCloudTasksData(data) {
           <div class="cloud-run-right">
             <span>#${escapeHtml(String(run.databaseId || ''))}</span>
             <span>${escapeHtml(dateStr)}</span>
-            <button class="btn-ghost-sm" title="View Terminal Logs">Logs</button>
+            <button class="cloud-action-btn-sm" title="View Terminal Logs">Logs</button>
           </div>
         `;
 
@@ -3022,7 +3022,7 @@ function renderCloudTasksData(data) {
           <span class="cloud-file-name">${escapeHtml(f.file)}</span>
           <div class="cloud-file-meta">
             <span>${formatBytes(f.size_bytes || 0)}</span>
-            <button class="btn-ghost-sm" title="Open file in editor">Open</button>
+            <button class="cloud-action-btn-sm" title="Open file in editor">Open</button>
           </div>
         `;
         const openBtn = frow.querySelector('button');
