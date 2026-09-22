@@ -157,36 +157,33 @@ class AgentEngine:
         proc_keys = ('run', 'execute', 'powershell', 'cmd', 'bash', 'terminal', 'python', 'script', 'process', 'task', 'background', 'start', 'stop', 'kill', 'server', 'npm', 'node')
         web_keys = ('search', 'web', 'google', 'duckduckgo', 'fetch', 'url', 'http', 'https', 'scrape', 'browse')
 
-        chosen_names = set()
+        # Core essential tools are ALWAYS present
+        chosen_names = {
+            'read_file', 'write_file', 'replace_in_file', 'list_directory',
+            'run_powershell'
+        }
 
+        # Independent checks so multi-domain requests (e.g. create app + git) get all needed tools
         if any(k in text_corpus for k in git_keys):
             chosen_names.update([
                 'git_status', 'git_diff', 'git_init', 'git_remote_add',
-                'git_commit_and_push', 'github_create_repo', 'github_repo_info',
-                'run_powershell'
+                'git_commit_and_push', 'github_create_repo', 'github_repo_info'
             ])
 
-        elif any(k in text_corpus for k in file_keys):
+        if any(k in text_corpus for k in file_keys):
             chosen_names.update([
-                'read_file', 'write_file', 'replace_in_file', 'copy_file',
-                'move_file', 'delete_file', 'list_directory'
+                'copy_file', 'move_file', 'delete_file'
             ])
 
-        elif any(k in text_corpus for k in proc_keys):
+        if any(k in text_corpus for k in proc_keys):
             chosen_names.update([
-                'run_powershell', 'run_python_code', 'run_background_process',
+                'run_python_code', 'run_background_process',
                 'get_background_tasks', 'stop_background_process'
             ])
 
-        elif any(k in text_corpus for k in web_keys):
+        if any(k in text_corpus for k in web_keys):
             chosen_names.update([
                 'fetch_web_content', 'duckduckgo_search'
-            ])
-
-        else:
-            chosen_names.update([
-                'read_file', 'write_file', 'run_powershell', 'list_directory',
-                'git_status', 'git_commit_and_push'
             ])
 
         filtered = [s for s in all_schemas if s.get("function", {}).get("name") in chosen_names]

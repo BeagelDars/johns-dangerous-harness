@@ -1661,12 +1661,13 @@ def git_diff(filepath: str = "", staged: bool = False, repo_dir: str = ".") -> s
         return f"Error retrieving git diff: {e}"
 
 @tool
-def git_commit_and_push(commit_message: str, branch: str = "", add_all: bool = True, repo_dir: str = ".") -> str:
+def git_commit_and_push(commit_message: str = "", message: str = "", msg: str = "", branch: str = "", add_all: bool = True, repo_dir: str = ".") -> str:
     """Stages changes, creates a git commit, and pushes to remote repository using configured git credentials."""
     try:
         target_dir = resolve_path(repo_dir)
-        if not commit_message or not commit_message.strip():
-            return "Error: commit_message cannot be empty."
+        effective_msg = (commit_message or message or msg or "").strip()
+        if not effective_msg:
+            effective_msg = "Update files via John's Harness"
 
         if add_all:
             add_res = subprocess.run(
@@ -1684,7 +1685,7 @@ def git_commit_and_push(commit_message: str, branch: str = "", add_all: bool = T
                 return f"Git add failed: {add_res.stderr.strip() or add_res.stdout.strip()}"
 
         commit_res = subprocess.run(
-            ["git", "commit", "-m", commit_message.strip()],
+            ["git", "commit", "-m", effective_msg],
             cwd=target_dir,
             capture_output=True,
             text=True,
@@ -1723,23 +1724,32 @@ def git_commit_and_push(commit_message: str, branch: str = "", add_all: bool = T
                 curr_br = br_res.stdout.strip() or branch or "main"
                 retry_res = subprocess.run(["git", "push", "-u", "origin", curr_br], cwd=target_dir, capture_output=True, text=True, env=_git_env(), creationflags=_WIN_NO_WINDOW, timeout=60)
                 if retry_res.returncode == 0:
-                    return f"Git Commit & Push Successful (upstream set to origin/{curr_br})!\nCommit: {commit_message}\n{retry_res.stdout.strip()}"
+                    return f"Git Commit & Push Successful (upstream set to origin/{curr_br})!\nCommit: {effective_msg}\n{retry_res.stdout.strip()}"
                 push_out += "\n" + retry_res.stderr.strip()
-            return f"Commit succeeded ({commit_message}), but push failed:\n{push_out}"
+            return f"Commit succeeded ({effective_msg}), but push failed:\n{push_out}"
 
-        return f"Git Commit & Push Successful!\nCommit: {commit_message}\nDetails:\n{commit_out}\n{push_out}".strip()
+        return f"Git Commit & Push Successful!\nCommit: {effective_msg}\nDetails:\n{commit_out}\n{push_out}".strip()
     except subprocess.TimeoutExpired:
         return "Git operation timed out."
     except Exception as e:
         return f"Error executing git commit and push: {e}"
 
 @tool
-def github_create_repo(repo_name: str, private: bool = False, repo_dir: str = ".") -> str:
+def github_create_repo(repo_name: str = "", name: str = "", private: bool = False, repo_dir: str = ".") -> str:
     """Creates a new repository on GitHub for the current project using the GitHub CLI (gh) and pushes code."""
     try:
         target_dir = resolve_path(repo_dir)
+        effective_name = (repo_name or name or os.path.basename(target_dir) or "my-app").strip()
         vis_flag = "--private" if private else "--public"
-        cmd = ["gh", "repo", "create", repo_name.strip(), vis_flag, "--source=.", "--remote=origin", "--push"]
+
+        # Check if remote origin already exists
+        rem_check = subprocess.run(["git", "remote"], cwd=target_dir, capture_output=True, text=True, env=_git_env(), creationflags=_WIN_NO_WINDOW)
+        remotes = [r.strip() for r in rem_check.stdout.splitlines() if r.strip()]
+
+        cmd = ["gh", "repo", "create", effective_name, vis_flag, "--source=.", "--push"]
+        if "origin" not in remotes:
+            cmd.insert(-1, "--remote=origin")
+
         res = subprocess.run(
             cmd,
             cwd=target_dir,
@@ -1753,8 +1763,12 @@ def github_create_repo(repo_name: str, private: bool = False, repo_dir: str = ".
         )
         out = (res.stdout.strip() + "\n" + res.stderr.strip()).strip()
         if res.returncode != 0:
+            if "already exists" in out.lower():
+                # Push to existing repository
+                push_res = subprocess.run(["git", "push", "-u", "origin", "main"], cwd=target_dir, capture_output=True, text=True, env=_git_env(), creationflags=_WIN_NO_WINDOW, timeout=40)
+                return f"GitHub repo already exists. Pushed changes to remote.\n{push_res.stdout.strip() or push_res.stderr.strip()}"
             return f"GitHub repo creation failed:\n{out}"
-        return f"Successfully created GitHub repository '{repo_name}'!\n{out}"
+        return f"Successfully created GitHub repository '{effective_name}'!\n{out}"
     except Exception as e:
         return f"Error creating GitHub repository: {e}"
 
