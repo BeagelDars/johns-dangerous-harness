@@ -484,6 +484,7 @@ function startNewConversation() {
   closeInspector();
   updateActiveSessionHighlight();
   setGenerating(false);
+  persistLastActiveState();
 }
 
 // Clear conversation history button
@@ -501,6 +502,47 @@ function formatTime(timestamp) {
   if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
   const d = new Date(timestamp * 1000);
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+// Last active workspace & session state persistence in localStorage
+function persistLastActiveState() {
+  try {
+    if (currentWorkspacePath) {
+      localStorage.setItem('harness_last_workspace', currentWorkspacePath);
+    }
+    if (currentSessionId) {
+      localStorage.setItem('harness_last_session_id', currentSessionId);
+    } else {
+      localStorage.removeItem('harness_last_session_id');
+    }
+  } catch (e) {}
+}
+
+window.addEventListener('beforeunload', persistLastActiveState);
+
+let initialRestoreAttempted = false;
+function tryRestoreLastSession() {
+  if (initialRestoreAttempted) return;
+
+  try {
+    const lastWorkspace = localStorage.getItem('harness_last_workspace');
+    const lastSessionId = localStorage.getItem('harness_last_session_id');
+
+    if (!lastWorkspace && !lastSessionId) return;
+    initialRestoreAttempted = true;
+
+    if (lastWorkspace) {
+      if (lastSessionId && window.harness && window.harness.loadSession) {
+        window.harness.loadSession(lastWorkspace, lastSessionId);
+      } else if (window.harness && window.harness.setWorkspace) {
+        if (!currentWorkspacePath || currentWorkspacePath.toLowerCase() !== lastWorkspace.toLowerCase()) {
+          window.harness.setWorkspace(lastWorkspace);
+        }
+      }
+    }
+  } catch (e) {
+    console.error('Failed to restore last active session state:', e);
+  }
 }
 
 // Collapsed project groups state in localStorage
@@ -1987,6 +2029,7 @@ function handleSend() {
     currentSessionId = 'sess_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
     const titleSeed = text || (currentAttachments.length > 0 ? `Inspect ${currentAttachments[0].name}` : 'New Conversation');
     currentSessionTitle = deriveTitle(titleSeed);
+    persistLastActiveState();
   }
 
   // Record user turn with timestamp and attachments
@@ -2311,6 +2354,7 @@ window.harness.onEvent((event) => {
     if (event.tasks) {
       renderBackgroundTasks(event.tasks);
     }
+    tryRestoreLastSession();
   }
 
   else if (type === 'workspace_changed') {
@@ -2326,11 +2370,13 @@ window.harness.onEvent((event) => {
     if (event.source === 'user' && !isGenerating) {
       startNewConversation();
     }
+    persistLastActiveState();
   }
 
   else if (type === 'projects_list' || type === 'project_unregistered') {
     if (event.projects) {
       renderProjectsTree(event.projects);
+      tryRestoreLastSession();
     }
   }
 
@@ -2403,6 +2449,7 @@ window.harness.onEvent((event) => {
       updateActiveSessionHighlight();
       scrollToBottom();
       setGenerating(false);
+      persistLastActiveState();
     }
   }
 
@@ -2554,6 +2601,9 @@ window.harness.onEvent((event) => {
   else if (type === 'error') {
     stopThinking();
     stopTurnTimer();
+    if (event.error && event.error.includes('Session') && event.error.includes('not found')) {
+      try { localStorage.removeItem('harness_last_session_id'); } catch (e) {}
+    }
     ensureAgentMessage();
     const errDiv = document.createElement('div');
     errDiv.style.color = 'var(--accent-red)';
