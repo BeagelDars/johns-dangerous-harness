@@ -1860,9 +1860,29 @@ function renderBackgroundTasks(tasks) {
   }
 }
 
-function scrollToBottom() {
-  chatContainer.scrollTop = chatContainer.scrollHeight;
+let userScrolledUp = false;
+let scrollRafId = null;
+
+if (chatContainer) {
+  chatContainer.addEventListener('scroll', () => {
+    const distFromBottom = chatContainer.scrollHeight - chatContainer.scrollTop - chatContainer.clientHeight;
+    userScrolledUp = distFromBottom > 100;
+  }, { passive: true });
 }
+
+function scrollToBottom(force = false) {
+  if (!chatContainer) return;
+  if (force) userScrolledUp = false;
+  if (userScrolledUp && !force) return;
+  if (scrollRafId) cancelAnimationFrame(scrollRafId);
+  scrollRafId = requestAnimationFrame(() => {
+    scrollRafId = null;
+    if (chatContainer && (!userScrolledUp || force)) {
+      chatContainer.scrollTop = chatContainer.scrollHeight;
+    }
+  });
+}
+
 
 // Thinking state & phrases
 let thinkingInterval = null;
@@ -1997,7 +2017,7 @@ function handleSend() {
   setGenerating(true);
 
   window.harness.sendQuery(text, currentAttachments);
-  scrollToBottom();
+  scrollToBottom(true);
 }
 
 function handleStop() {
@@ -2175,7 +2195,7 @@ function ensureAgentMessage() {
   currentAgentMessageEl = row;
 }
 
-// Streaming Typewriter Effect
+// High-performance, instant & snappy text streaming
 function streamText(targetEl, fullText, onDone) {
   if (!fullText) {
     if (onDone) onDone();
@@ -2187,36 +2207,81 @@ function streamText(targetEl, fullText, onDone) {
     typewriterTimer = null;
   }
 
-  let index = 0;
   const length = fullText.length;
-  const chunkSize = length > 1500 ? 12 : length > 600 ? 6 : 3;
-  const intervalMs = 12;
 
-  typewriterTimer = setInterval(() => {
-    index += chunkSize;
-    if (index >= length) {
-      index = length;
+  // Short and direct answers (<= 250 chars) render INSTANTLY with zero delay
+  if (length <= 250) {
+    if (typeof marked !== 'undefined') {
+      targetEl.innerHTML = marked.parse(fullText);
+    } else {
+      targetEl.textContent = fullText;
+    }
+    attachCodeCopyButtons(targetEl);
+    scrollToBottom(true);
+    if (onDone) onDone();
+    return;
+  }
+
+  // For longer responses: buttery 60fps streaming completed in ~120ms total
+  let index = 0;
+  const chunkSize = Math.max(35, Math.ceil(length / 8));
+  let streamRaf = null;
+
+  const cleanup = () => {
+    if (streamRaf) {
+      cancelAnimationFrame(streamRaf);
+      streamRaf = null;
+    }
+    if (typewriterTimer) {
       clearInterval(typewriterTimer);
       typewriterTimer = null;
-      if (typeof marked !== 'undefined') {
-        targetEl.innerHTML = marked.parse(fullText);
-      } else {
-        targetEl.textContent = fullText;
-      }
+    }
+    window.removeEventListener('keydown', onInteraction);
+    targetEl.removeEventListener('click', flushImmediately);
+  };
+
+  const flushImmediately = () => {
+    cleanup();
+    if (typeof marked !== 'undefined') {
+      targetEl.innerHTML = marked.parse(fullText);
+    } else {
+      targetEl.textContent = fullText;
+    }
+    attachCodeCopyButtons(targetEl);
+    scrollToBottom(false);
+    if (onDone) onDone();
+  };
+
+  const onInteraction = (e) => {
+    if (e.key === 'Escape' || e.key === 'Enter') {
+      flushImmediately();
+    }
+  };
+
+  window.addEventListener('keydown', onInteraction, { once: true });
+  targetEl.addEventListener('click', flushImmediately, { once: true });
+
+  const stepStream = () => {
+    index = Math.min(length, index + chunkSize);
+    const currentChunk = fullText.substring(0, index);
+    if (typeof marked !== 'undefined') {
+      targetEl.innerHTML = marked.parse(currentChunk);
+    } else {
+      targetEl.textContent = currentChunk;
+    }
+    scrollToBottom(false);
+
+    if (index >= length) {
+      cleanup();
       attachCodeCopyButtons(targetEl);
-      scrollToBottom();
+      scrollToBottom(false);
       if (onDone) onDone();
     } else {
-      const currentChunk = fullText.substring(0, index);
-      if (typeof marked !== 'undefined') {
-        targetEl.innerHTML = marked.parse(currentChunk);
-      } else {
-        targetEl.textContent = currentChunk;
-      }
-      attachCodeCopyButtons(targetEl);
-      scrollToBottom();
+      streamRaf = requestAnimationFrame(stepStream);
     }
-  }, intervalMs);
+  };
+
+  streamRaf = requestAnimationFrame(stepStream);
 }
 
 // Handle incoming events from Python bridge
@@ -2281,8 +2346,19 @@ window.harness.onEvent((event) => {
     if (event.sessions && targetPath) {
       const p = registeredProjects.find(pr => pr.path === targetPath || pr.path.toLowerCase() === targetPath.toLowerCase());
       if (p) {
+        const prevCount = (p.sessions || []).length;
         p.sessions = event.sessions;
-        renderProjectsTree(registeredProjects);
+        const newCount = (event.sessions || []).length;
+        if (type !== 'session_saved' || prevCount !== newCount) {
+          renderProjectsTree(registeredProjects);
+        } else {
+          // Efficiently update active session title in-place without sidebar DOM destruction
+          const activeTitleEl = projectsTree ? projectsTree.querySelector(`.session-item[data-session-id="${currentSessionId}"] .session-item-title`) : null;
+          if (activeTitleEl && currentSessionTitle && activeTitleEl.textContent !== currentSessionTitle) {
+            activeTitleEl.textContent = currentSessionTitle;
+            activeTitleEl.title = currentSessionTitle;
+          }
+        }
       }
     }
     if (type === 'session_deleted' || type === 'session_renamed') {

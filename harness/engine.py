@@ -12,6 +12,23 @@ from harness.server import ensure_server_running
 import config
 
 _CLOUD_EXHAUSTED = False
+_CLOUD_EXHAUSTED_UNTIL = 0.0
+_http_pool = None
+
+def _get_http_pool():
+    global _http_pool
+    if _http_pool is None:
+        try:
+            import urllib3
+            _http_pool = urllib3.PoolManager(
+                num_pools=5,
+                maxsize=10,
+                timeout=urllib3.Timeout(connect=5.0, read=30.0),
+                retries=False
+            )
+        except Exception:
+            _http_pool = False
+    return _http_pool
 
 class AgentEngine:
     def __init__(
@@ -58,36 +75,30 @@ class AgentEngine:
     @staticmethod
     def classify_query(query: str) -> tuple[str, str]:
         """
-        Routes queries based on required cognitive load.
-        Simple text review, scraping, extraction, file listing, git operations -> Local (saves API quota).
-        Complex logic, coding, debugging, architectural design -> Cloud Gemini.
+        Routes queries based on required cognitive load and provider availability.
+        In Auto mode:
+        If Gemini cloud is available, routes to fast Gemini Flash Lite (<1s latency, high intelligence).
+        If offline, unconfigured, or cloud quota is exhausted, auto-routes to Local Qwen.
         """
-        global _CLOUD_EXHAUSTED
+        global _CLOUD_EXHAUSTED, _CLOUD_EXHAUSTED_UNTIL
+        import time
         if _CLOUD_EXHAUSTED:
-            return "local", "Cloud quota currently exhausted; auto-routed to Local Qwen (3b)"
+            if time.time() < _CLOUD_EXHAUSTED_UNTIL:
+                return "local", "Cloud quota currently exhausted; auto-routed to Local Qwen (3b)"
+            else:
+                _CLOUD_EXHAUSTED = False  # Cooldown passed, re-enable cloud
 
         q = query.lower()
 
-        complex_keywords = [
-            'debug', 'fix bug', 'architect', 'refactor', 'design', 'algorithm',
-            'why does', 'deep research', 'plan a', 'solve complex', 'write code',
-            'build an app', 'create an app', 'create a new app', 'create app',
-            'make an app', 'web app', 'application', 'optimize', 'implement',
-            'research', 'search the web', 'google', 'duckduckgo', 'look up', 'latest', 'news about'
-        ]
-        routine_keywords = [
-            'scrape', 'scraping', 'fetch', 'extract', 'review text', 'summarize',
-            'read file', 'list files', 'list dir', 'calculate', 'count lines',
-            'format text', 'clean up', 'parse text', 'regex',
-            'git', 'status', 'push', 'commit', 'branch', 'diff', 'init', 'github', 'repo'
-        ]
+        # Explicit requests for local or offline execution
+        local_keywords = ['offline', 'local model', 'on-device', 'without internet', 'no cloud']
+        if any(k in q for k in local_keywords):
+            return "local", "Explicit local/offline execution requested"
 
-        has_complex = any(k in q for k in complex_keywords)
-        has_routine = any(k in q for k in routine_keywords)
+        if not config.GEMINI_KEY:
+            return "local", "No Gemini API key configured; auto-routed to Local Qwen"
 
-        if has_routine and not has_complex:
-            return "local", "Routine task (git / text processing / basic lookup)"
-        return "gemini", "High-cognition / Research / Multi-step task"
+        return "gemini", "Gemini Flash Lite (Fast cloud inference)"
 
     def switch_profile(self, profile_name: str) -> bool:
         """Switch between configured model profiles ('auto', 'gemini', 'local')."""
@@ -108,28 +119,32 @@ class AgentEngine:
     @staticmethod
     def _clean_messages_for_model(messages: List[Dict[str, Any]], target_model: str) -> List[Dict[str, Any]]:
         """Cleans messages to ensure universal compatibility across Gemini, Ollama, Groq, and OpenRouter."""
+        is_gemini = "gemini" in target_model.lower()
         cleaned = []
         for m in messages:
             m_copy = dict(m)
-            m_copy.pop("extra_content", None)
+            if not is_gemini:
+                m_copy.pop("extra_content", None)
             if "tool_calls" in m_copy and isinstance(m_copy["tool_calls"], list):
                 cleaned_tcs = []
                 for tc in m_copy["tool_calls"]:
                     tc_copy = dict(tc)
-                    tc_copy.pop("extra_content", None)
                     func_info = tc_copy.get("function", {})
                     fn_name = func_info.get("name", "")
                     fn_args = func_info.get("arguments", "{}")
                     if isinstance(fn_args, dict):
                         fn_args = json.dumps(fn_args)
-                    cleaned_tcs.append({
+                    cleaned_tc = {
                         "id": str(tc_copy.get("id") or f"call_{fn_name}"),
                         "type": "function",
                         "function": {
                             "name": fn_name,
                             "arguments": fn_args
                         }
-                    })
+                    }
+                    if is_gemini and "extra_content" in tc_copy:
+                        cleaned_tc["extra_content"] = tc_copy["extra_content"]
+                    cleaned_tcs.append(cleaned_tc)
                 m_copy["tool_calls"] = cleaned_tcs
             cleaned.append(m_copy)
         return cleaned
@@ -137,70 +152,124 @@ class AgentEngine:
     @staticmethod
     def _select_tools(messages: List[Dict[str, Any]], target_model: str) -> List[Dict[str, Any]]:
         """
-        Dynamically filters tool schemas to reduce CPU latency on local models.
-        Sending 35 tool schemas on CPU Ollama takes ~75s; sending 6-10 focused tools takes ~7-10s.
+        Dynamically filters tool schemas to reduce latency and token overhead.
+        Sending 37 tool schemas (~15KB) adds massive prefill and token overhead.
+        Pruning to relevant tools dramatically accelerates generation and prevents hallucinations.
         """
         all_schemas = registry.get_schemas()
-        is_local = "localhost" in target_model.lower() or "127.0.0.1" in target_model.lower() or "qwen" in target_model.lower()
-        if not is_local:
-            return all_schemas
 
-        # Extract text context ONLY from user messages (ignore system prompt rules)
+        # Extract text context from user messages and any tools already called
         text_corpus = ""
+        used_tool_names = set()
         for m in messages:
-            if m.get("role") == "user":
+            r = m.get("role")
+            if r == "user":
                 c = m.get("content", "")
                 if isinstance(c, str):
                     text_corpus += " " + c.lower()
+                elif isinstance(c, list):
+                    for part in c:
+                        if isinstance(part, dict) and part.get("type") == "text":
+                            text_corpus += " " + str(part.get("text", "")).lower()
+            elif r == "assistant":
+                for tc in m.get("tool_calls", []):
+                    fn = tc.get("function", {}).get("name")
+                    if fn:
+                        used_tool_names.add(fn)
+            elif r == "tool":
+                fn = m.get("name")
+                if fn:
+                    used_tool_names.add(fn)
 
         git_keys = ('git', 'repo', 'repository', 'commit', 'push', 'pull', 'branch', 'diff', 'status', 'remote', 'github', 'gh', 'origin')
         file_keys = ('file', 'read', 'write', 'create', 'delete', 'copy', 'move', 'directory', 'dir', 'folder', 'replace', 'edit', 'path', 'save')
+        find_keys = ('find', 'search', 'grep', 'lookup', 'locate', 'where is', 'pattern')
         proc_keys = ('run', 'execute', 'powershell', 'cmd', 'bash', 'terminal', 'python', 'script', 'process', 'task', 'background', 'start', 'stop', 'kill', 'server', 'npm', 'node')
         web_keys = ('search', 'web', 'google', 'duckduckgo', 'fetch', 'url', 'http', 'https', 'scrape', 'browse')
+        calc_keys = ('calc', 'calculate', 'math', 'sqrt', 'expression', 'sum', 'multiply', 'divide', 'equation')
+        doc_keys = ('doc', 'document', 'pdf', 'docx', 'xlsx', 'excel', 'csv', 'pptx')
+        media_keys = ('image', 'screenshot', 'picture', 'photo', 'vision', 'ocr', 'open')
+        mem_keys = ('memory', 'remember', 'recall', 'preference', 'knowledge')
+        ws_keys = ('workspace', 'project', 'scaffold', 'switch workspace')
 
         # Core essential tools are ALWAYS present
         chosen_names = {
             'read_file', 'write_file', 'replace_in_file', 'list_directory',
             'run_powershell'
         }
+        chosen_names.update(used_tool_names)
 
-        # Independent checks so multi-domain requests (e.g. create app + git) get all needed tools
+        matched_any_domain = False
+
+        if any(k in text_corpus for k in calc_keys):
+            chosen_names.update(['calculate', 'run_python_code'])
+            matched_any_domain = True
+
         if any(k in text_corpus for k in git_keys):
             chosen_names.update([
                 'git_status', 'git_diff', 'git_init', 'git_remote_add',
                 'git_commit_and_push', 'github_create_repo', 'github_repo_info'
             ])
+            matched_any_domain = True
 
         if any(k in text_corpus for k in file_keys):
             chosen_names.update([
-                'copy_file', 'move_file', 'delete_file'
+                'read_file_range', 'copy_file', 'move_file', 'delete_file', 'open_file'
             ])
+            matched_any_domain = True
+
+        if any(k in text_corpus for k in find_keys):
+            chosen_names.update(['find_files', 'search_file_contents'])
+            matched_any_domain = True
 
         if any(k in text_corpus for k in proc_keys):
             chosen_names.update([
                 'run_python_code', 'run_background_process',
                 'list_background_processes', 'check_background_process', 'stop_background_process'
             ])
+            matched_any_domain = True
 
         if any(k in text_corpus for k in web_keys):
-            chosen_names.update([
-                'web_search', 'fetch_webpage'
-            ])
+            chosen_names.update(['web_search', 'fetch_webpage', 'download_file'])
+            matched_any_domain = True
+
+        if any(k in text_corpus for k in doc_keys):
+            chosen_names.update(['read_document', 'download_file'])
+            matched_any_domain = True
+
+        if any(k in text_corpus for k in media_keys):
+            chosen_names.update(['inspect_image', 'open_file'])
+            matched_any_domain = True
+
+        if any(k in text_corpus for k in mem_keys):
+            chosen_names.update(['save_memory', 'recall_memory', 'delete_memory', 'save_project_knowledge'])
+            matched_any_domain = True
+
+        if any(k in text_corpus for k in ws_keys):
+            chosen_names.update(['get_workspace', 'set_workspace', 'create_project', 'save_project_knowledge'])
+            matched_any_domain = True
+
+        is_local = "localhost" in target_model.lower() or "127.0.0.1" in target_model.lower() or "qwen" in target_model.lower()
+        if not is_local and not matched_any_domain:
+            return all_schemas
 
         filtered = [s for s in all_schemas if s.get("function", {}).get("name") in chosen_names]
         return filtered if filtered else all_schemas
 
     def _call_api(self, messages: List[Dict[str, Any]], with_tools: bool = True) -> Dict[str, Any]:
-        """Makes an HTTP POST request with automated instant fallback to local Qwen on cloud slowdown/error."""
-        global _CLOUD_EXHAUSTED
+        """Makes an HTTP POST request with connection pooling, keep-alive, and instant fallback."""
+        global _CLOUD_EXHAUSTED, _CLOUD_EXHAUSTED_UNTIL
         import time, re, socket
 
         max_retries = 3
+        pool = _get_http_pool()
+
         for attempt in range(max_retries):
             url = f"{self.base_url}/chat/completions"
             headers = {
                 "Content-Type": "application/json",
-                "Authorization": f"Bearer {self.api_key}"
+                "Authorization": f"Bearer {self.api_key}",
+                "Connection": "keep-alive"
             }
             prepared_messages = self._clean_messages_for_model(messages, self.model)
             payload = {
@@ -212,30 +281,52 @@ class AgentEngine:
                 payload["tools"] = self._select_tools(messages, self.model)
                 payload["tool_choice"] = "auto"
 
-            # Tight 5-second timeout for cloud so user never hangs; 120s for local CPU evaluation
+            # 30-second timeout for cloud ensures no false timeouts; 120s for local CPU evaluation
             is_local = "localhost" in self.base_url or "127.0.0.1" in self.base_url
-            timeout_sec = 120 if is_local else 5
+            timeout_sec = 120 if is_local else 30
 
-            req = urllib.request.Request(
-                url,
-                data=json.dumps(payload).encode("utf-8"),
-                headers=headers,
-                method="POST"
-            )
+            encoded_payload = json.dumps(payload).encode("utf-8")
 
             try:
-                with urllib.request.urlopen(req, timeout=timeout_sec) as response:
-                    return json.loads(response.read().decode("utf-8"))
+                if pool and not is_local:
+                    import urllib3, io
+                    resp = pool.request(
+                        "POST",
+                        url,
+                        body=encoded_payload,
+                        headers=headers,
+                        timeout=urllib3.Timeout(connect=5.0, read=timeout_sec)
+                    )
+                    if resp.status == 200:
+                        return json.loads(resp.data.decode("utf-8"))
+                    else:
+                        err_text = resp.data.decode("utf-8", errors="replace")
+                        http_err = urllib.error.HTTPError(
+                            url, resp.status, err_text, headers, io.BytesIO(resp.data)
+                        )
+                        http_err.error_body = err_text
+                        raise http_err
+                else:
+                    req = urllib.request.Request(
+                        url,
+                        data=encoded_payload,
+                        headers=headers,
+                        method="POST"
+                    )
+                    with urllib.request.urlopen(req, timeout=timeout_sec) as response:
+                        return json.loads(response.read().decode("utf-8"))
 
             except Exception as e:
                 is_timeout = isinstance(e, (TimeoutError, socket.timeout)) or "timed out" in str(e).lower()
                 is_http_err = isinstance(e, urllib.error.HTTPError)
-                error_body = ""
-                if is_http_err:
+                error_body = getattr(e, "error_body", "")
+                if not error_body and is_http_err:
                     try:
                         error_body = e.read().decode("utf-8")
                     except Exception:
                         error_body = str(e)
+                if not error_body:
+                    error_body = str(e)
 
                 is_cloud_fail = (
                     is_timeout or
@@ -249,8 +340,23 @@ class AgentEngine:
                     isinstance(e, urllib.error.URLError)
                 )
 
+                gemini_fallback = config.PROFILES.get("gemini", {}).get("fallback_model")
+                if is_cloud_fail and "gemini" in self.model and gemini_fallback and self.model != gemini_fallback:
+                    old_m = self.model
+                    self.model = gemini_fallback
+                    reason = "Cloud Gemini timed out" if is_timeout else f"Cloud Gemini busy/quota ({getattr(e, 'code', 'error')})"
+                    self.pending_events.append({
+                        "type": "model_fallback",
+                        "from": old_m,
+                        "to": self.model,
+                        "reason": f"{reason}; switched to cloud fallback ({self.model})"
+                    })
+                    time.sleep(0.2)
+                    continue
+
                 if is_cloud_fail and "gemini" in self.model and "local" in config.PROFILES:
                     _CLOUD_EXHAUSTED = True
+                    _CLOUD_EXHAUSTED_UNTIL = time.time() + 60.0
                     local_prof = config.PROFILES["local"]
                     old_m = self.model
                     self.model = local_prof["model"]
