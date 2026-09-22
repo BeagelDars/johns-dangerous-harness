@@ -1,0 +1,45 @@
+name: Wittenberge Real Estate (24/7 Scraper)
+
+on:
+  schedule:
+    - cron: '0 */4 * * *'
+  workflow_dispatch:
+
+jobs:
+  scrape_wittenberge:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Run Wittenberge Scraper
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          python scrapers/wittenberge_scraper.py
+
+      - name: Upload Scraped Results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: wittenberge-real-estate-results
+          path: |
+            scrapers/data/
+            output/
+          retention-days: 30
+
+      - name: Commit & Push Updated Scraper Data
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add scrapers/data/ output/ || true
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Auto-update Wittenberge real estate dataset [skip ci]" && git push)

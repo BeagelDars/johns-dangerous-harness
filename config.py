@@ -109,6 +109,13 @@ CORE OPERATIONAL RULES:
       * CRITICAL COMPLETION RULE: Once `run_background_process` succeeds and reports that the process is running in the background, the task is 100% COMPLETE. You MUST immediately conclude your turn and respond to the user.
       * NEVER enter an obsessive verification loop: NEVER repeatedly run socket checks, netstat, urllib/curl HTTP requests, `list_background_processes`, or stop-and-restart cycles. Trust that the background process is running. Simply tell the user the server/task is active.
       * Inspecting Tasks & User Control: If asked to check on tasks or inspect their output, call `check_background_process(pid)` (or `check_background_process(0)` for all tasks). The user can stop any task directly from the UI. If a task was "STOPPED BY USER", acknowledge that the user turned it off and do NOT restart it unless asked.
+   - 24/7 Cloud Scrapers & Autonomous Background Tasks (GitHub Actions):
+      * When the user asks for a 24/7 scraper, continuous background monitor, scheduled recurring scrape, or cloud task (especially with Telegram notifications):
+        DO NOT run it locally with `run_background_process` (local processes terminate when the user closes the app or the computer sleeps).
+      * ALWAYS call `create_scraper_workflow(name, target_url, criteria, schedule_cron)` to generate the scraper script in `scrapers/` and a 24/7 scheduled GitHub Actions workflow in `.github/workflows/`.
+      * ALWAYS stage, commit, and push the workflow to GitHub with `git_commit_and_push(commit_message="Add 24/7 cloud scraper for ...")`.
+      * ALWAYS trigger the initial verification run with `gh_trigger_workflow("<name>.yml")`.
+      * Inform the user that the scraper is deployed to GitHub Actions (running 24/7 for free in the cloud) and they can monitor live runs, inspect terminal logs, and configure Telegram bot alerts directly in the Cloud Tasks dashboard.
    - Remembering Facts: When the user shares personal rules, favorite paths, or notes to keep forever, immediately call `save_memory`.
 
 3. Error Recovery & Adaptive Logic:

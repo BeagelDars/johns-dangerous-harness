@@ -1495,6 +1495,32 @@ def _git_env() -> Dict[str, str]:
 
 _WIN_NO_WINDOW = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
 
+def find_repo_root(start_dir: Optional[str] = None) -> str:
+    """Finds the nearest git repository root directory by walking up from start_dir.
+    Falls back to the repository root where the harness source lives, or the active workspace."""
+    start = canonical_path(start_dir or get_active_workspace())
+    curr = start
+    while curr:
+        if os.path.exists(os.path.join(curr, ".git")):
+            return curr
+        parent = os.path.dirname(curr)
+        if parent == curr:
+            break
+        curr = parent
+
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    candidates = [
+        os.path.dirname(script_dir),
+        script_dir,
+        os.path.abspath(os.path.join(script_dir, "..", "..", "..", "..")),
+        r"C:\Users\User\Downloads\Johns dangerous harness",
+    ]
+    for c in candidates:
+        if c and os.path.exists(os.path.join(c, ".git")):
+            return canonical_path(c)
+
+    return start
+
 def _run_git_cmd(cmd: List[str], cwd: str, timeout: int = 25) -> subprocess.CompletedProcess:
     """Executes a git or gh CLI command with DEVNULL stdin and tight timeout to prevent IPC deadlocks."""
     return subprocess.run(
@@ -1556,7 +1582,7 @@ def git_remote_add(remote_url: str, remote_name: str = "origin", repo_dir: str =
 def git_status(repo_dir: str = ".") -> str:
     """Checks git repository status (branch, modified files, untracked files, ahead/behind status)."""
     try:
-        target = resolve_path(repo_dir)
+        target = find_repo_root(resolve_path(repo_dir))
         if not os.path.exists(os.path.join(target, ".git")):
             return f"Directory '{target}' is not a git repository. Use 'git_init' to initialize git here if desired."
 
@@ -1597,7 +1623,7 @@ def git_status(repo_dir: str = ".") -> str:
 def git_diff(filepath: str = "", staged: bool = False, repo_dir: str = ".") -> str:
     """Inspects git line-by-line diffs for uncommitted or staged changes. Prevents token overload by limiting output length."""
     try:
-        target_dir = resolve_path(repo_dir)
+        target_dir = find_repo_root(resolve_path(repo_dir))
         if not os.path.exists(os.path.join(target_dir, ".git")):
             return f"Directory '{target_dir}' is not a git repository."
 
@@ -1639,7 +1665,7 @@ def git_diff(filepath: str = "", staged: bool = False, repo_dir: str = ".") -> s
 def git_commit_and_push(commit_message: str = "", message: str = "", msg: str = "", branch: str = "", add_all: bool = True, repo_dir: str = ".") -> str:
     """Stages changes, creates a git commit, and pushes to remote repository using configured git credentials."""
     try:
-        target_dir = resolve_path(repo_dir)
+        target_dir = find_repo_root(resolve_path(repo_dir))
         if not os.path.exists(os.path.join(target_dir, ".git")):
             return f"Error: '{target_dir}' is not a git repository. Call 'git_init' first."
 
@@ -1861,59 +1887,85 @@ def delete_file(filepath: str, permanent: bool = False) -> str:
 def gh_list_workflows(repo_dir: str = ".") -> str:
     """Lists GitHub Actions workflows in the connected repository, including local workflow files and schedules."""
     try:
-        target = resolve_path(repo_dir)
+        ws = resolve_path(repo_dir)
+        repo_root = find_repo_root(ws)
 
-        # 1. Check local .github/workflows directory
-        wf_dir = os.path.join(target, ".github", "workflows")
+        # 1. Check local .github/workflows directory (in repo_root and ws)
+        seen_wfs = set()
         local_files = []
-        if os.path.exists(wf_dir) and os.path.isdir(wf_dir):
-            for fname in sorted(os.listdir(wf_dir)):
-                if fname.endswith((".yml", ".yaml")):
-                    fpath = os.path.join(wf_dir, fname)
-                    try:
-                        with open(fpath, "r", encoding="utf-8", errors="replace") as f:
-                            content = f.read()
-                        cron_match = re.search(r"cron:\s*['\"]([^'\"]+)['\"]", content)
-                        name_match = re.search(r"^name:\s*([^\r\n]+)", content, re.MULTILINE)
-                        local_files.append({
-                            "file": fname,
-                            "name": name_match.group(1).strip() if name_match else fname,
-                            "cron": cron_match.group(1).strip() if cron_match else "None (Manual)",
-                            "path": os.path.relpath(fpath, target).replace("\\", "/")
-                        })
-                    except Exception:
-                        local_files.append({"file": fname, "name": fname, "cron": "Unknown"})
+        for check_dir in [os.path.join(repo_root, ".github", "workflows"), os.path.join(ws, ".github", "workflows")]:
+            if os.path.exists(check_dir) and os.path.isdir(check_dir):
+                for fname in sorted(os.listdir(check_dir)):
+                    if fname.endswith((".yml", ".yaml")) and fname not in seen_wfs:
+                        seen_wfs.add(fname)
+                        fpath = os.path.join(check_dir, fname)
+                        try:
+                            with open(fpath, "r", encoding="utf-8", errors="replace") as f:
+                                content = f.read()
+                            cron_match = re.search(r"cron:\s*['\"]([^'\"]+)['\"]", content)
+                            name_match = re.search(r"^name:\s*([^\r\n]+)", content, re.MULTILINE)
+                            local_files.append({
+                                "file": fname,
+                                "name": name_match.group(1).strip() if name_match else fname,
+                                "cron": cron_match.group(1).strip() if cron_match else "None (Manual)",
+                                "path": os.path.relpath(fpath, repo_root).replace("\\", "/")
+                            })
+                        except Exception:
+                            local_files.append({"file": fname, "name": fname, "cron": "Unknown"})
 
-        # 2. Query remote GitHub workflows via gh CLI
-        res = _run_git_cmd(["gh", "workflow", "list", "--all"], cwd=target, timeout=12)
+        # 2. Query remote GitHub workflows via gh CLI (executed in repo_root)
+        res = _run_git_cmd(["gh", "workflow", "list", "--all"], cwd=repo_root, timeout=12)
         remote_output = res.stdout.strip() if res.returncode == 0 else ""
 
-        # 3. Check scrapers/ directory
-        scrapers_dir = os.path.join(target, "scrapers")
+        # 3. Check scrapers/ directory and any *scraper*.py files in repo_root and ws
+        seen_scrapers = set()
         scrapers = []
-        if os.path.exists(scrapers_dir) and os.path.isdir(scrapers_dir):
-            for sname in sorted(os.listdir(scrapers_dir)):
-                if sname.endswith(".py"):
-                    spath = os.path.join(scrapers_dir, sname)
-                    scrapers.append({
-                        "file": sname,
-                        "path": os.path.relpath(spath, target).replace("\\", "/"),
-                        "size_bytes": os.path.getsize(spath)
-                    })
+        search_dirs = [
+            os.path.join(repo_root, "scrapers"),
+            os.path.join(ws, "scrapers"),
+            repo_root,
+            ws
+        ]
+        for sdir in search_dirs:
+            if os.path.exists(sdir) and os.path.isdir(sdir):
+                for sname in sorted(os.listdir(sdir)):
+                    if sname.endswith(".py"):
+                        is_scraper = ("scrapers" in sdir) or ("scraper" in sname.lower())
+                        if is_scraper and sname not in seen_scrapers:
+                            seen_scrapers.add(sname)
+                            spath = os.path.join(sdir, sname)
+                            if os.path.isfile(spath):
+                                scrapers.append({
+                                    "file": sname,
+                                    "path": os.path.relpath(spath, repo_root).replace("\\", "/"),
+                                    "size_bytes": os.path.getsize(spath)
+                                })
 
-        # 4. Check scrapers/data/ directory for saved files
-        data_dir = os.path.join(scrapers_dir, "data")
+        # 4. Check scrapers/data/ and output/ directories for saved files
+        seen_data = set()
         saved_data = []
-        if os.path.exists(data_dir) and os.path.isdir(data_dir):
-            for dname in sorted(os.listdir(data_dir)):
-                dpath = os.path.join(data_dir, dname)
-                if os.path.isfile(dpath):
-                    saved_data.append({
-                        "file": dname,
-                        "path": os.path.relpath(dpath, target).replace("\\", "/"),
-                        "size_bytes": os.path.getsize(dpath),
-                        "modified": datetime.fromtimestamp(os.path.getmtime(dpath)).isoformat()
-                    })
+        data_dirs = [
+            os.path.join(repo_root, "scrapers", "data"),
+            os.path.join(ws, "scrapers", "data"),
+            os.path.join(repo_root, "output"),
+            os.path.join(ws, "output"),
+            repo_root,
+            ws
+        ]
+        for ddir in data_dirs:
+            if os.path.exists(ddir) and os.path.isdir(ddir):
+                for dname in sorted(os.listdir(ddir)):
+                    if dname.endswith(".json") and not dname.startswith(".") and dname not in ("package.json", "package-lock.json", "tsconfig.json"):
+                        if dname not in seen_data:
+                            seen_data.add(dname)
+                            dpath = os.path.join(ddir, dname)
+                            if os.path.isfile(dpath):
+                                saved_data.append({
+                                    "file": dname,
+                                    "path": os.path.relpath(dpath, repo_root).replace("\\", "/"),
+                                    "size_bytes": os.path.getsize(dpath),
+                                    "modified": datetime.fromtimestamp(os.path.getmtime(dpath)).isoformat()
+                                })
 
         result = {
             "local_workflows": local_files,
@@ -1929,7 +1981,7 @@ def gh_list_workflows(repo_dir: str = ".") -> str:
 def gh_list_runs(limit: int = 15, workflow: str = "", repo_dir: str = ".") -> str:
     """Lists recent GitHub Actions workflow runs, statuses (success, failure, in_progress, queued), durations, and URLs."""
     try:
-        target = resolve_path(repo_dir)
+        target = find_repo_root(resolve_path(repo_dir))
         cmd = ["gh", "run", "list", "--limit", str(limit), "--json", "databaseId,name,status,conclusion,createdAt,updatedAt,url,workflowName,workflowDatabaseId"]
         if workflow:
             cmd.extend(["--workflow", workflow])
@@ -1945,7 +1997,7 @@ def gh_list_runs(limit: int = 15, workflow: str = "", repo_dir: str = ".") -> st
 def gh_trigger_workflow(workflow_name_or_file: str, repo_dir: str = ".") -> str:
     """Manually dispatches an on-demand run of a GitHub Actions workflow using 'gh workflow run'."""
     try:
-        target = resolve_path(repo_dir)
+        target = find_repo_root(resolve_path(repo_dir))
         wf = workflow_name_or_file.strip()
         cmd = ["gh", "workflow", "run", wf]
         res = _run_git_cmd(cmd, cwd=target, timeout=20)
@@ -1960,7 +2012,7 @@ def gh_trigger_workflow(workflow_name_or_file: str, repo_dir: str = ".") -> str:
 def gh_get_run_logs(run_id: str, repo_dir: str = ".") -> str:
     """Fetches the full terminal execution logs of a specific GitHub Actions workflow run."""
     try:
-        target = resolve_path(repo_dir)
+        target = find_repo_root(resolve_path(repo_dir))
         clean_id = str(run_id).strip()
         cmd = ["gh", "run", "view", clean_id, "--log"]
         res = _run_git_cmd(cmd, cwd=target, timeout=25)
@@ -1979,7 +2031,7 @@ def gh_get_run_logs(run_id: str, repo_dir: str = ".") -> str:
 def gh_set_secret(secret_name: str, secret_value: str, repo_dir: str = ".") -> str:
     """Securely stores an encrypted secret in the GitHub repository (e.g. TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID)."""
     try:
-        target = resolve_path(repo_dir)
+        target = find_repo_root(resolve_path(repo_dir))
         name = secret_name.strip().upper()
         val = secret_value.strip()
         if not name or not val:
@@ -2020,7 +2072,6 @@ def test_telegram_bot(bot_token: str, chat_id: str, message: str = "Test notific
             data = json.loads(body)
             if data.get("ok"):
                 return f"Success! Telegram message sent to chat {cid}."
-            return f"Telegram API returned not ok: {body}"
     except urllib.error.HTTPError as e:
         err_msg = e.read().decode('utf-8', errors='replace')
         return f"Telegram HTTP {e.code} Error: {err_msg}"
@@ -2031,18 +2082,26 @@ def test_telegram_bot(bot_token: str, chat_id: str, message: str = "Test notific
 def create_scraper_workflow(name: str, target_url: str, criteria: str = "", schedule_cron: str = "0 * * * *", telegram_notify: bool = True, repo_dir: str = ".") -> str:
     """Generates an end-to-end 24/7 cloud scraper script in 'scrapers/' and a matching scheduled GitHub Actions workflow in '.github/workflows/'."""
     try:
-        target = resolve_path(repo_dir)
+        ws = resolve_path(repo_dir)
+        target = find_repo_root(ws)
         safe_name = re.sub(r"[^a-zA-Z0-9_-]", "_", name.strip().lower())
         if not safe_name:
             safe_name = "custom_scraper"
 
-        # 1. Create directories
+        # 1. Create directories in repo root (target)
         scrapers_dir = os.path.join(target, "scrapers")
         data_dir = os.path.join(scrapers_dir, "data")
         wf_dir = os.path.join(target, ".github", "workflows")
         os.makedirs(scrapers_dir, exist_ok=True)
         os.makedirs(data_dir, exist_ok=True)
         os.makedirs(wf_dir, exist_ok=True)
+
+        if ws != target:
+            try:
+                os.makedirs(os.path.join(ws, "scrapers"), exist_ok=True)
+                os.makedirs(os.path.join(ws, "scrapers", "data"), exist_ok=True)
+            except Exception:
+                pass
 
         # 2. Python scraper script template
         scraper_template = r'''#!/usr/bin/env python3
@@ -2163,6 +2222,13 @@ if __name__ == "__main__":
         scraper_file = os.path.join(scrapers_dir, f"{safe_name}.py")
         with open(scraper_file, "w", encoding="utf-8") as f:
             f.write(scraper_code)
+
+        if ws != target:
+            try:
+                with open(os.path.join(ws, "scrapers", f"{safe_name}.py"), "w", encoding="utf-8") as f:
+                    f.write(scraper_code)
+            except Exception:
+                pass
 
         # 3. GitHub Actions workflow YAML
         wf_template = '''name: __NAME__ (24/7 Scraper)
