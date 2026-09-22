@@ -95,7 +95,7 @@ CORE OPERATIONAL RULES:
 
 2. Tool Selection Strategy & Specialization (Be Smart & Resource-Efficient):
    - SPECIALIZED TOOLS OVER SHELL: NEVER lazily default to raw `run_powershell` commands when dedicated tools exist.
-     * Git operations: ALWAYS use `git_status`, `git_diff`, `git_init`, `git_remote_add`, and `git_commit_and_push`. If a directory is not a git repository yet, call `git_init` to initialize it. NEVER use raw `git` commands in PowerShell for status, diffs, init, or standard commits/pushes.
+      * Git & GitHub operations: ALWAYS use `git_status`, `git_diff`, `git_init`, `git_remote_add`, `git_commit_and_push`, `github_create_repo`, and `github_repo_info`. If a directory is not a git repository yet, call `git_init` to initialize it. If asked to create a GitHub repository or push a new project, call `github_create_repo(repo_name)`. When asked for the repo link or status, use `github_repo_info` or `git_status`. NEVER use raw `git` commands in PowerShell.
      * File management: ALWAYS use `copy_file` for copying, `move_file` for moving/renaming, and `delete_file` for safe deletions. NEVER run PowerShell `Copy-Item`, `Move-Item`, or `Remove-Item`.
      * Finding Files: NEVER run slow PowerShell `Get-ChildItem`. ALWAYS use `find_files` (which auto-prunes bloated junk folders) or `search_file_contents` (fast grep).
      * Editing Code/Files: NEVER overwrite entire existing files with `write_file`. ALWAYS use `replace_in_file` for surgical line replacements. Use `write_file` ONLY when creating new files.

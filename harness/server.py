@@ -37,13 +37,12 @@ def find_ollama_executable() -> str:
 
     return "ollama"
 
-def ensure_server_running(timeout: int = 10) -> bool:
+def ensure_server_running(timeout: int = 5, background: bool = False) -> bool:
     """Ensures Ollama is running silently. Starts it in the background if down."""
     if is_server_running():
         return True
 
     ollama_bin = find_ollama_executable()
-    print("  [Auto-Server] Local model server is offline. Starting silently in background...")
 
     # Windows flag to start completely hidden with no console popup
     creation_flags = 0
@@ -59,16 +58,17 @@ def ensure_server_running(timeout: int = 10) -> bool:
             stdin=subprocess.DEVNULL
         )
     except Exception as e:
-        print(f"  [Auto-Server Error] Failed to launch '{ollama_bin}': {e}")
         return False
 
-    # Wait until the server answers
+    if background:
+        return True
+
+    # Wait briefly until the server answers
     start_time = time.time()
     while time.time() - start_time < timeout:
-        time.sleep(0.5)
+        time.sleep(0.3)
         if is_server_running():
-            print("  [Auto-Server] Server connected and ready! [OK]")
             return True
 
-    print("  [Auto-Server Warning] Server started but did not respond within timeout.")
     return False
+

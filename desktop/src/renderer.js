@@ -855,6 +855,12 @@ function formatToolBrief(toolName, rawArgs) {
   if (name === 'git_init') {
     return a.repo_dir && a.repo_dir !== '.' ? a.repo_dir : '';
   }
+  if (name === 'github_create_repo') {
+    return a.repo_name || '';
+  }
+  if (name === 'github_repo_info') {
+    return '';
+  }
   if (name === 'copy_file') {
     return `${a.src || ''} -> ${a.dest || ''}`;
   }
@@ -1078,7 +1084,9 @@ const GIT_TOOLS = new Set([
   'git_diff',
   'git_init',
   'git_remote_add',
-  'git_commit_and_push'
+  'git_commit_and_push',
+  'github_create_repo',
+  'github_repo_info'
 ]);
 
 const COMMAND_TOOLS = new Set([
@@ -1656,7 +1664,7 @@ function openInspector(toolCall) {
   } else if (toolCall.name === 'powershell' || toolCall.name === 'run_powershell' || toolCall.name === 'run_background_process') {
     if (titleEl) titleEl.textContent = toolCall.name === 'run_background_process' ? 'BACKGROUND PROCESS COMMAND' : 'POWERSHELL COMMAND';
     inspectorArgsCode.textContent = args.command || '';
-  } else if (toolCall.name.startsWith('git_')) {
+  } else if (toolCall.name.startsWith('git_') || toolCall.name.startsWith('github_')) {
     if (titleEl) titleEl.textContent = `GIT: ${toolCall.name.toUpperCase()}`;
     try {
       const formatted = typeof toolCall.args === 'string'
@@ -2357,11 +2365,17 @@ window.harness.onEvent((event) => {
     if (activeToolCalls.length > 0) {
       let targetTool = null;
       const lookupId = event.id || event.tool_call_id;
-      if (lookupId) {
-        targetTool = activeToolCalls.find(t => t.id === lookupId);
+      if (lookupId && event.tool) {
+        targetTool = activeToolCalls.slice().reverse().find(t => t.id === lookupId && t.name === event.tool && t.status === 'running');
+      }
+      if (!targetTool && lookupId) {
+        targetTool = activeToolCalls.slice().reverse().find(t => t.id === lookupId && t.status === 'running');
       }
       if (!targetTool && event.tool) {
         targetTool = activeToolCalls.slice().reverse().find(t => t.name === event.tool && t.status === 'running');
+      }
+      if (!targetTool && lookupId) {
+        targetTool = activeToolCalls.slice().reverse().find(t => t.id === lookupId);
       }
       if (!targetTool) {
         targetTool = activeToolCalls.slice().reverse().find(t => t.status === 'running');

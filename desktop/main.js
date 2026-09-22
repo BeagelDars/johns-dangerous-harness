@@ -12,6 +12,7 @@ let queryCounter = 0;
 
 function getProjectRoot() {
   const candidates = [
+    __dirname,
     path.resolve(__dirname, '..'),
     path.resolve(__dirname, '..', '..', '..', '..'),
     path.resolve(__dirname, '..', '..', '..'),

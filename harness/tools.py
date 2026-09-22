@@ -1717,6 +1717,14 @@ def git_commit_and_push(commit_message: str, branch: str = "", add_all: bool = T
         )
         push_out = (push_res.stdout.strip() + "\n" + push_res.stderr.strip()).strip()
         if push_res.returncode != 0:
+            # Auto fallback for missing upstream tracking
+            if "no upstream branch" in push_out.lower() or "set-upstream" in push_out.lower():
+                br_res = subprocess.run(["git", "branch", "--show-current"], cwd=target_dir, capture_output=True, text=True, env=_git_env(), creationflags=_WIN_NO_WINDOW)
+                curr_br = br_res.stdout.strip() or branch or "main"
+                retry_res = subprocess.run(["git", "push", "-u", "origin", curr_br], cwd=target_dir, capture_output=True, text=True, env=_git_env(), creationflags=_WIN_NO_WINDOW, timeout=60)
+                if retry_res.returncode == 0:
+                    return f"Git Commit & Push Successful (upstream set to origin/{curr_br})!\nCommit: {commit_message}\n{retry_res.stdout.strip()}"
+                push_out += "\n" + retry_res.stderr.strip()
             return f"Commit succeeded ({commit_message}), but push failed:\n{push_out}"
 
         return f"Git Commit & Push Successful!\nCommit: {commit_message}\nDetails:\n{commit_out}\n{push_out}".strip()
@@ -1724,6 +1732,54 @@ def git_commit_and_push(commit_message: str, branch: str = "", add_all: bool = T
         return "Git operation timed out."
     except Exception as e:
         return f"Error executing git commit and push: {e}"
+
+@tool
+def github_create_repo(repo_name: str, private: bool = False, repo_dir: str = ".") -> str:
+    """Creates a new repository on GitHub for the current project using the GitHub CLI (gh) and pushes code."""
+    try:
+        target_dir = resolve_path(repo_dir)
+        vis_flag = "--private" if private else "--public"
+        cmd = ["gh", "repo", "create", repo_name.strip(), vis_flag, "--source=.", "--remote=origin", "--push"]
+        res = subprocess.run(
+            cmd,
+            cwd=target_dir,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            env=_git_env(),
+            creationflags=_WIN_NO_WINDOW,
+            timeout=60
+        )
+        out = (res.stdout.strip() + "\n" + res.stderr.strip()).strip()
+        if res.returncode != 0:
+            return f"GitHub repo creation failed:\n{out}"
+        return f"Successfully created GitHub repository '{repo_name}'!\n{out}"
+    except Exception as e:
+        return f"Error creating GitHub repository: {e}"
+
+@tool
+def github_repo_info(repo_dir: str = ".") -> str:
+    """Returns details and URLs of the connected GitHub repository using the GitHub CLI (gh)."""
+    try:
+        target_dir = resolve_path(repo_dir)
+        res = subprocess.run(
+            ["gh", "repo", "view", "--json", "name,owner,url,visibility,isPrivate"],
+            cwd=target_dir,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            env=_git_env(),
+            creationflags=_WIN_NO_WINDOW,
+            timeout=15
+        )
+        if res.returncode != 0:
+            err = res.stderr.strip() or res.stdout.strip()
+            return f"GitHub repo info unavailable: {err}"
+        return f"GitHub Repository:\n{res.stdout.strip()}"
+    except Exception as e:
+        return f"Error retrieving GitHub repo info: {e}"
 
 @tool
 def copy_file(source: str, destination: str, overwrite: bool = False) -> str:

@@ -11,6 +11,8 @@ from harness.registry import registry
 from harness.server import ensure_server_running
 import config
 
+_CLOUD_EXHAUSTED = False
+
 class AgentEngine:
     def __init__(
         self,
@@ -40,9 +42,9 @@ class AgentEngine:
         self.aborted = False
         self.pending_events: List[Dict[str, Any]] = []
 
-        # If pointing to local Ollama, ensure it is silently running
+        # If pointing to local Ollama, ensure it is silently running in background without blocking startup
         if "11434" in self.base_url and ("localhost" in self.base_url or "127.0.0.1" in self.base_url):
-            ensure_server_running()
+            ensure_server_running(background=True)
 
     def abort(self):
         """Immediately halts ongoing reasoning loop and terminates active subprocesses."""
@@ -57,9 +59,13 @@ class AgentEngine:
     def classify_query(query: str) -> tuple[str, str]:
         """
         Routes queries based on required cognitive load.
-        Simple text review, scraping, extraction, file listing -> Local (saves API quota).
+        Simple text review, scraping, extraction, file listing, git operations -> Local (saves API quota).
         Complex logic, coding, debugging, architectural design -> Cloud Gemini.
         """
+        global _CLOUD_EXHAUSTED
+        if _CLOUD_EXHAUSTED:
+            return "local", "Cloud quota currently exhausted; auto-routed to Local Qwen (3b)"
+
         q = query.lower()
 
         complex_keywords = [
@@ -71,14 +77,15 @@ class AgentEngine:
         routine_keywords = [
             'scrape', 'scraping', 'fetch', 'extract', 'review text', 'summarize',
             'read file', 'list files', 'list dir', 'calculate', 'count lines',
-            'format text', 'clean up', 'parse text', 'regex'
+            'format text', 'clean up', 'parse text', 'regex',
+            'git', 'status', 'push', 'commit', 'branch', 'diff', 'init', 'github', 'repo'
         ]
 
         has_complex = any(k in q for k in complex_keywords)
         has_routine = any(k in q for k in routine_keywords)
 
         if has_routine and not has_complex:
-            return "local", "Routine task (scraping / text processing / basic lookup)"
+            return "local", "Routine task (git / text processing / basic lookup)"
         return "gemini", "High-cognition / Research / Multi-step task"
 
     def switch_profile(self, profile_name: str) -> bool:
@@ -93,138 +100,180 @@ class AgentEngine:
             self.base_url = prof["base_url"].rstrip("/")
             self.api_key = prof["api_key"]
             if "11434" in self.base_url and ("localhost" in self.base_url or "127.0.0.1" in self.base_url):
-                ensure_server_running()
+                ensure_server_running(background=True)
             return True
         return False
 
     @staticmethod
     def _clean_messages_for_model(messages: List[Dict[str, Any]], target_model: str) -> List[Dict[str, Any]]:
-        """Strips Google extra_content / thought_signatures if the target model does not support them."""
-        needs_thought = "3.6-flash" in target_model or "thinking" in target_model
+        """Cleans messages to ensure universal compatibility across Gemini, Ollama, Groq, and OpenRouter."""
         cleaned = []
         for m in messages:
             m_copy = dict(m)
-            if not needs_thought:
-                m_copy.pop("extra_content", None)
+            m_copy.pop("extra_content", None)
             if "tool_calls" in m_copy and isinstance(m_copy["tool_calls"], list):
                 cleaned_tcs = []
                 for tc in m_copy["tool_calls"]:
                     tc_copy = dict(tc)
-                    if not needs_thought:
-                        tc_copy.pop("extra_content", None)
-                    cleaned_tcs.append(tc_copy)
+                    tc_copy.pop("extra_content", None)
+                    func_info = tc_copy.get("function", {})
+                    fn_name = func_info.get("name", "")
+                    fn_args = func_info.get("arguments", "{}")
+                    if isinstance(fn_args, dict):
+                        fn_args = json.dumps(fn_args)
+                    cleaned_tcs.append({
+                        "id": str(tc_copy.get("id") or f"call_{fn_name}"),
+                        "type": "function",
+                        "function": {
+                            "name": fn_name,
+                            "arguments": fn_args
+                        }
+                    })
                 m_copy["tool_calls"] = cleaned_tcs
             cleaned.append(m_copy)
         return cleaned
 
-    def _call_api(self, messages: List[Dict[str, Any]], with_tools: bool = True) -> Dict[str, Any]:
-        """Makes an HTTP POST request to the completions endpoint with automated quota/model fallback."""
-        url = f"{self.base_url}/chat/completions"
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {self.api_key}"
-        }
-        prepared_messages = self._clean_messages_for_model(messages, self.model)
-        payload = {
-            "model": self.model,
-            "messages": prepared_messages,
-            "temperature": self.temperature
-        }
-        if with_tools:
-            payload["tools"] = registry.get_schemas()
-            payload["tool_choice"] = "auto"
+    @staticmethod
+    def _select_tools(messages: List[Dict[str, Any]], target_model: str) -> List[Dict[str, Any]]:
+        """
+        Dynamically filters tool schemas to reduce CPU latency on local models.
+        Sending 35 tool schemas on CPU Ollama takes ~75s; sending 6-10 focused tools takes ~7-10s.
+        """
+        all_schemas = registry.get_schemas()
+        is_local = "localhost" in target_model.lower() or "127.0.0.1" in target_model.lower() or "qwen" in target_model.lower()
+        if not is_local:
+            return all_schemas
 
-        import time, re
+        # Extract text context ONLY from user messages (ignore system prompt rules)
+        text_corpus = ""
+        for m in messages:
+            if m.get("role") == "user":
+                c = m.get("content", "")
+                if isinstance(c, str):
+                    text_corpus += " " + c.lower()
+
+        git_keys = ('git', 'repo', 'repository', 'commit', 'push', 'pull', 'branch', 'diff', 'status', 'remote', 'github', 'gh', 'origin')
+        file_keys = ('file', 'read', 'write', 'create', 'delete', 'copy', 'move', 'directory', 'dir', 'folder', 'replace', 'edit', 'path', 'save')
+        proc_keys = ('run', 'execute', 'powershell', 'cmd', 'bash', 'terminal', 'python', 'script', 'process', 'task', 'background', 'start', 'stop', 'kill', 'server', 'npm', 'node')
+        web_keys = ('search', 'web', 'google', 'duckduckgo', 'fetch', 'url', 'http', 'https', 'scrape', 'browse')
+
+        chosen_names = set()
+
+        if any(k in text_corpus for k in git_keys):
+            chosen_names.update([
+                'git_status', 'git_diff', 'git_init', 'git_remote_add',
+                'git_commit_and_push', 'github_create_repo', 'github_repo_info',
+                'run_powershell'
+            ])
+
+        elif any(k in text_corpus for k in file_keys):
+            chosen_names.update([
+                'read_file', 'write_file', 'replace_in_file', 'copy_file',
+                'move_file', 'delete_file', 'list_directory'
+            ])
+
+        elif any(k in text_corpus for k in proc_keys):
+            chosen_names.update([
+                'run_powershell', 'run_python_code', 'run_background_process',
+                'get_background_tasks', 'stop_background_process'
+            ])
+
+        elif any(k in text_corpus for k in web_keys):
+            chosen_names.update([
+                'fetch_web_content', 'duckduckgo_search'
+            ])
+
+        else:
+            chosen_names.update([
+                'read_file', 'write_file', 'run_powershell', 'list_directory',
+                'git_status', 'git_commit_and_push'
+            ])
+
+        filtered = [s for s in all_schemas if s.get("function", {}).get("name") in chosen_names]
+        return filtered if filtered else all_schemas
+
+    def _call_api(self, messages: List[Dict[str, Any]], with_tools: bool = True) -> Dict[str, Any]:
+        """Makes an HTTP POST request with automated instant fallback to local Qwen on cloud slowdown/error."""
+        global _CLOUD_EXHAUSTED
+        import time, re, socket
+
         max_retries = 3
         for attempt in range(max_retries):
+            url = f"{self.base_url}/chat/completions"
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.api_key}"
+            }
+            prepared_messages = self._clean_messages_for_model(messages, self.model)
+            payload = {
+                "model": self.model,
+                "messages": prepared_messages,
+                "temperature": self.temperature
+            }
+            if with_tools:
+                payload["tools"] = self._select_tools(messages, self.model)
+                payload["tool_choice"] = "auto"
+
+            # Tight 5-second timeout for cloud so user never hangs; 120s for local CPU evaluation
+            is_local = "localhost" in self.base_url or "127.0.0.1" in self.base_url
+            timeout_sec = 120 if is_local else 5
+
             req = urllib.request.Request(
                 url,
                 data=json.dumps(payload).encode("utf-8"),
                 headers=headers,
                 method="POST"
             )
+
             try:
-                with urllib.request.urlopen(req, timeout=120) as response:
+                with urllib.request.urlopen(req, timeout=timeout_sec) as response:
                     return json.loads(response.read().decode("utf-8"))
-            except urllib.error.HTTPError as e:
-                error_body = e.read().decode("utf-8")
-                is_cloud_unavailable = (
-                    e.code in (429, 500, 502, 503, 504) or
-                    "high demand" in error_body.lower() or
-                    "unavailable" in error_body.lower() or
-                    "resource_exhausted" in error_body.lower() or
-                    (e.code == 400 and "thought_signature" in error_body)
+
+            except Exception as e:
+                is_timeout = isinstance(e, (TimeoutError, socket.timeout)) or "timed out" in str(e).lower()
+                is_http_err = isinstance(e, urllib.error.HTTPError)
+                error_body = ""
+                if is_http_err:
+                    try:
+                        error_body = e.read().decode("utf-8")
+                    except Exception:
+                        error_body = str(e)
+
+                is_cloud_fail = (
+                    is_timeout or
+                    (is_http_err and (
+                        e.code in (429, 500, 502, 503, 504) or
+                        "high demand" in error_body.lower() or
+                        "unavailable" in error_body.lower() or
+                        "resource_exhausted" in error_body.lower() or
+                        "thought_signature" in error_body.lower()
+                    )) or
+                    isinstance(e, urllib.error.URLError)
                 )
-                if is_cloud_unavailable:
-                    # 1. If currently on 3.6-flash, switch immediately to flash-lite
-                    if "3.6-flash" in self.model:
-                        old_m = self.model
-                        fallback_target = config.PROFILES.get("gemini", {}).get("fallback_model", "gemini-flash-lite-latest")
-                        self.model = fallback_target
-                        payload["model"] = self.model
-                        payload["messages"] = self._clean_messages_for_model(messages, self.model)
-                        reason_msg = f"Gemini 3.6 Flash high demand / quota reached (HTTP {e.code}); seamlessly switched to {self.model}"
-                        self.pending_events.append({
-                            "type": "model_fallback",
-                            "from": old_m,
-                            "to": self.model,
-                            "reason": reason_msg
-                        })
-                        time.sleep(1)
-                        continue
-                    # 2. If already on flash-lite and it still fails, fall back to local if auto or local exists
-                    elif "local" in config.PROFILES and (self.active_mode == "auto" or attempt == max_retries - 1):
-                        local_prof = config.PROFILES["local"]
-                        old_m = self.model
-                        self.model = local_prof["model"]
-                        self.base_url = local_prof["base_url"].rstrip("/")
-                        self.api_key = local_prof["api_key"]
-                        ensure_server_running()
-                        self.pending_events.append({
-                            "type": "model_fallback",
-                            "from": old_m,
-                            "to": self.model,
-                            "reason": f"Cloud API unavailable (HTTP {e.code}); seamlessly switched to Local Qwen"
-                        })
-                        url = f"{self.base_url}/chat/completions"
-                        headers["Authorization"] = f"Bearer {self.api_key}"
-                        payload["model"] = self.model
-                        payload["messages"] = self._clean_messages_for_model(messages, self.model)
-                        time.sleep(1)
-                        continue
-                    elif attempt < max_retries - 1:
-                        wait_sec = 3
-                        match = re.search(r'retry in ([0-9.]+)s', error_body)
-                        if match:
-                            wait_sec = min(int(float(match.group(1))) + 1, 60)
-                        time.sleep(wait_sec)
-                        continue
-                raise RuntimeError(f"HTTP Error {e.code}: {error_body}")
-            except urllib.error.URLError as e:
-                if (self.active_mode == "auto" or "gemini" in self.model) and "local" in config.PROFILES:
-                    local_prof = config.PROFILES.get("local")
-                    if local_prof and self.model != local_prof["model"]:
-                        old_m = self.model
-                        self.model = local_prof["model"]
-                        self.base_url = local_prof["base_url"].rstrip("/")
-                        self.api_key = local_prof["api_key"]
-                        ensure_server_running()
-                        self.pending_events.append({
-                            "type": "model_fallback",
-                            "from": old_m,
-                            "to": self.model,
-                            "reason": "Cloud API unreachable; switched smoothly to Local Qwen"
-                        })
-                        url = f"{self.base_url}/chat/completions"
-                        headers["Authorization"] = f"Bearer {self.api_key}"
-                        payload["model"] = self.model
-                        payload["messages"] = self._clean_messages_for_model(messages, self.model)
-                        time.sleep(1)
-                        continue
-                raise RuntimeError(
-                    f"Cannot connect to {url}.\n"
-                    f"    -> Make sure the server is reachable or model profile is valid: {self.model}"
-                )
+
+                if is_cloud_fail and "gemini" in self.model and "local" in config.PROFILES:
+                    _CLOUD_EXHAUSTED = True
+                    local_prof = config.PROFILES["local"]
+                    old_m = self.model
+                    self.model = local_prof["model"]
+                    self.base_url = local_prof["base_url"].rstrip("/")
+                    self.api_key = local_prof["api_key"]
+                    ensure_server_running(background=True)
+                    reason = "Cloud Gemini timed out" if is_timeout else f"Cloud Gemini busy/quota ({getattr(e, 'code', 'error')})"
+                    self.pending_events.append({
+                        "type": "model_fallback",
+                        "from": old_m,
+                        "to": self.model,
+                        "reason": f"{reason}; seamlessly switched to Local Qwen (3b)"
+                    })
+                    time.sleep(0.2)
+                    continue
+
+                if attempt < max_retries - 1:
+                    time.sleep(0.5)
+                    continue
+
+                raise RuntimeError(f"Harness Error ({self.model}): {error_body or e}")
 
     def _call_completion(self, messages: List[Dict[str, Any]], with_tools: bool = True) -> Dict[str, Any]:
         """Invokes _call_api with inspection to ensure compatibility with single-arg mock callables in tests."""
@@ -277,7 +326,7 @@ class AgentEngine:
             self.base_url = prof["base_url"].rstrip("/")
             self.api_key = prof["api_key"]
             if "11434" in self.base_url and ("localhost" in self.base_url or "127.0.0.1" in self.base_url):
-                ensure_server_running()
+                ensure_server_running(background=True)
             yield {
                 "type": "routing",
                 "target": target_profile,
@@ -360,14 +409,17 @@ class AgentEngine:
 
             # Process all tool calls requested in this turn
             loop_circuit_broken = False
-            for tc in tool_calls:
+            for i, tc in enumerate(tool_calls):
                 if self.aborted:
                     yield {"type": "aborted", "content": "[Generation stopped by user]"}
                     return "[Generation stopped by user]"
                 func_info = tc.get("function", {})
                 func_name = func_info.get("name", "")
                 raw_args = func_info.get("arguments", "{}")
-                tool_call_id = tc.get("id", "call_default")
+                tool_call_id = tc.get("id")
+                if not tool_call_id:
+                    tool_call_id = f"call_{step}_{i}_{func_name}"
+                    tc["id"] = tool_call_id
 
                 try:
                     args = json.loads(raw_args) if isinstance(raw_args, str) else raw_args
