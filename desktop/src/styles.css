@@ -598,10 +598,15 @@ body {
    Welcome Hero
    ------------------------------------------------------------- */
 .welcome-hero {
-  max-width: 720px;
-  margin: 16px 0;
-  padding: 24px 0;
-  text-align: left;
+  max-width: 640px;
+  width: 100%;
+  margin: auto auto;
+  align-self: center;
+  padding: 32px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
 }
 
 .hero-brand {
@@ -611,12 +616,14 @@ body {
   color: var(--text-muted);
   letter-spacing: -0.2px;
   margin-bottom: 24px;
+  text-align: center;
 }
 
 .suggestion-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 10px;
+  gap: 12px;
+  width: 100%;
   text-align: left;
 }
 

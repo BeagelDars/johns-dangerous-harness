@@ -118,9 +118,10 @@ def register_project(project_path: str) -> Dict[str, Any]:
         }
         projects.insert(0, project_obj)
     else:
-        # Move to front
-        projects.remove(found)
-        projects.insert(0, found)
+        # Update existing project attributes without jumping position in sidebar list
+        found["last_active"] = time.time()
+        found["name"] = name
+        found["path"] = abs_path
 
     data["projects"] = projects[:50]  # Keep recent 50 projects
     _save_registry(data)

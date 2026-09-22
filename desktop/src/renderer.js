@@ -480,7 +480,7 @@ function startNewConversation() {
   }
 
   messagesList.innerHTML = '';
-  if (welcomeHero) welcomeHero.style.display = 'block';
+  if (welcomeHero) welcomeHero.style.display = 'flex';
   closeInspector();
   updateActiveSessionHighlight();
   setGenerating(false);
@@ -609,6 +609,9 @@ function renderProjectsTree(projects) {
 
     header.addEventListener('click', () => {
       if (!isCurrentProject) {
+        group.classList.remove('collapsed');
+        group.classList.add('expanded');
+        setProjectCollapsedState(proj.path, false);
         window.harness.setWorkspace(proj.path);
       } else {
         // Toggle collapse on click of active project header
