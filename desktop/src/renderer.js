@@ -2610,6 +2610,20 @@ function escapeHtml(str) {
     .replace(/'/g, '&#039;');
 }
 
+// Open all external links (http/https/mailto) in default system browser (Chrome, Edge, etc.)
+document.addEventListener('click', (e) => {
+  const linkEl = e.target.closest('a');
+  if (linkEl && linkEl.href) {
+    const url = linkEl.href;
+    if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('mailto:')) {
+      e.preventDefault();
+      if (window.harness && window.harness.openExternal) {
+        window.harness.openExternal(url);
+      }
+    }
+  }
+});
+
 // Request initial status and project list on load
 if (window.harness) {
   if (window.harness.getStatus) window.harness.getStatus();
