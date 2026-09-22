@@ -24,6 +24,11 @@ contextBridge.exposeInMainWorld('harness', {
   stopProcess: (pid) => ipcRenderer.send('tasks:stop', { pid }),
   getProcessOutput: (pid) => ipcRenderer.send('tasks:get_output', { pid }),
   openExternal: (url) => ipcRenderer.invoke('app:open_external', url),
+  cloudListTasks: () => ipcRenderer.send('cloud:list_tasks'),
+  cloudTriggerRun: (workflow) => ipcRenderer.send('cloud:trigger_run', { workflow }),
+  cloudGetLogs: (runId) => ipcRenderer.send('cloud:get_logs', { run_id: runId }),
+  cloudSetTelegram: (botToken, chatId) => ipcRenderer.send('cloud:set_telegram', { bot_token: botToken, chat_id: chatId }),
+  cloudTestTelegram: (botToken, chatId, message) => ipcRenderer.send('cloud:test_telegram', { bot_token: botToken, chat_id: chatId, message }),
   onEvent: (callback) => {
     const handler = (event, data) => callback(data);
     ipcRenderer.on('agent:event', handler);

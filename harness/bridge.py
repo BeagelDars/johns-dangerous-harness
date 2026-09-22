@@ -379,6 +379,74 @@ def main():
                 "output": out
             })
 
+        elif action == "cloud_list_tasks":
+            try:
+                raw_wf = tools.gh_list_workflows()
+                try:
+                    wf_data = json.loads(raw_wf)
+                except Exception:
+                    wf_data = {"local_workflows": [], "scrapers": [], "saved_data": [], "remote_workflows_raw": raw_wf}
+
+                raw_runs = tools.gh_list_runs(limit=20)
+                try:
+                    runs_data = json.loads(raw_runs)
+                except Exception:
+                    runs_data = []
+
+                emit({
+                    "id": req_id,
+                    "type": "cloud_tasks_data",
+                    "workflows": wf_data.get("local_workflows", []),
+                    "scrapers": wf_data.get("scrapers", []),
+                    "saved_data": wf_data.get("saved_data", []),
+                    "remote_raw": wf_data.get("remote_workflows_raw", ""),
+                    "runs": runs_data
+                })
+            except Exception as e:
+                emit({"id": req_id, "type": "error", "error": f"Failed to list cloud tasks: {e}"})
+
+        elif action == "cloud_trigger_run":
+            wf_target = cmd.get("workflow", "")
+            res = tools.gh_trigger_workflow(wf_target)
+            emit({
+                "id": req_id,
+                "type": "cloud_run_triggered",
+                "workflow": wf_target,
+                "result": res
+            })
+
+        elif action == "cloud_get_logs":
+            run_id = cmd.get("run_id", "")
+            logs_res = tools.gh_get_run_logs(run_id)
+            emit({
+                "id": req_id,
+                "type": "cloud_logs_data",
+                "run_id": run_id,
+                "logs": logs_res
+            })
+
+        elif action == "cloud_set_telegram":
+            bot_token = cmd.get("bot_token", "").strip()
+            chat_id = cmd.get("chat_id", "").strip()
+            res1 = tools.gh_set_secret("TELEGRAM_BOT_TOKEN", bot_token)
+            res2 = tools.gh_set_secret("TELEGRAM_CHAT_ID", chat_id)
+            emit({
+                "id": req_id,
+                "type": "cloud_telegram_configured",
+                "message": f"{res1}\n{res2}"
+            })
+
+        elif action == "cloud_test_telegram":
+            bot_token = cmd.get("bot_token", "").strip()
+            chat_id = cmd.get("chat_id", "").strip()
+            test_msg = cmd.get("message", "Test alert from John's Harness! 24/7 Cloud Scraper connection verified.")
+            res = tools.test_telegram_bot(bot_token, chat_id, test_msg)
+            emit({
+                "id": req_id,
+                "type": "cloud_telegram_tested",
+                "result": res
+            })
+
         elif action == "exit":
             agent.abort()
             break

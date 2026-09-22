@@ -16,6 +16,10 @@ import time
 import uuid
 import collections
 import shutil
+import json
+import urllib.request
+import urllib.parse
+import urllib.error
 from datetime import datetime
 from typing import Dict, Any, List, Optional, Callable
 from harness.registry import tool
@@ -1848,3 +1852,377 @@ def delete_file(filepath: str, permanent: bool = False) -> str:
             return f"Safely moved {item_type} to trash archive at '{trash_target}'. (Use permanent=True if you wish to permanently destroy)."
     except Exception as e:
         return f"Error deleting '{filepath}': {e}"
+
+# ==============================================================================
+# 24/7 Cloud Scrapers & GitHub Actions Automation Tools
+# ==============================================================================
+
+@tool
+def gh_list_workflows(repo_dir: str = ".") -> str:
+    """Lists GitHub Actions workflows in the connected repository, including local workflow files and schedules."""
+    try:
+        target = resolve_path(repo_dir)
+
+        # 1. Check local .github/workflows directory
+        wf_dir = os.path.join(target, ".github", "workflows")
+        local_files = []
+        if os.path.exists(wf_dir) and os.path.isdir(wf_dir):
+            for fname in sorted(os.listdir(wf_dir)):
+                if fname.endswith((".yml", ".yaml")):
+                    fpath = os.path.join(wf_dir, fname)
+                    try:
+                        with open(fpath, "r", encoding="utf-8", errors="replace") as f:
+                            content = f.read()
+                        cron_match = re.search(r"cron:\s*['\"]([^'\"]+)['\"]", content)
+                        name_match = re.search(r"^name:\s*([^\r\n]+)", content, re.MULTILINE)
+                        local_files.append({
+                            "file": fname,
+                            "name": name_match.group(1).strip() if name_match else fname,
+                            "cron": cron_match.group(1).strip() if cron_match else "None (Manual)",
+                            "path": os.path.relpath(fpath, target).replace("\\", "/")
+                        })
+                    except Exception:
+                        local_files.append({"file": fname, "name": fname, "cron": "Unknown"})
+
+        # 2. Query remote GitHub workflows via gh CLI
+        res = _run_git_cmd(["gh", "workflow", "list", "--all"], cwd=target, timeout=12)
+        remote_output = res.stdout.strip() if res.returncode == 0 else ""
+
+        # 3. Check scrapers/ directory
+        scrapers_dir = os.path.join(target, "scrapers")
+        scrapers = []
+        if os.path.exists(scrapers_dir) and os.path.isdir(scrapers_dir):
+            for sname in sorted(os.listdir(scrapers_dir)):
+                if sname.endswith(".py"):
+                    spath = os.path.join(scrapers_dir, sname)
+                    scrapers.append({
+                        "file": sname,
+                        "path": os.path.relpath(spath, target).replace("\\", "/"),
+                        "size_bytes": os.path.getsize(spath)
+                    })
+
+        # 4. Check scrapers/data/ directory for saved files
+        data_dir = os.path.join(scrapers_dir, "data")
+        saved_data = []
+        if os.path.exists(data_dir) and os.path.isdir(data_dir):
+            for dname in sorted(os.listdir(data_dir)):
+                dpath = os.path.join(data_dir, dname)
+                if os.path.isfile(dpath):
+                    saved_data.append({
+                        "file": dname,
+                        "path": os.path.relpath(dpath, target).replace("\\", "/"),
+                        "size_bytes": os.path.getsize(dpath),
+                        "modified": datetime.fromtimestamp(os.path.getmtime(dpath)).isoformat()
+                    })
+
+        result = {
+            "local_workflows": local_files,
+            "scrapers": scrapers,
+            "saved_data": saved_data,
+            "remote_workflows_raw": remote_output or "(No active workflows found on remote or repository not pushed yet)"
+        }
+        return json.dumps(result, indent=2)
+    except Exception as e:
+        return f"Error listing workflows: {e}"
+
+@tool
+def gh_list_runs(limit: int = 15, workflow: str = "", repo_dir: str = ".") -> str:
+    """Lists recent GitHub Actions workflow runs, statuses (success, failure, in_progress, queued), durations, and URLs."""
+    try:
+        target = resolve_path(repo_dir)
+        cmd = ["gh", "run", "list", "--limit", str(limit), "--json", "databaseId,name,status,conclusion,createdAt,updatedAt,url,workflowName,workflowDatabaseId"]
+        if workflow:
+            cmd.extend(["--workflow", workflow])
+        res = _run_git_cmd(cmd, cwd=target, timeout=15)
+        if res.returncode != 0:
+            err = res.stderr.strip() or res.stdout.strip()
+            return f"Error fetching GitHub Actions runs: {err}"
+        return res.stdout.strip() or "[]"
+    except Exception as e:
+        return f"Error listing GitHub Actions runs: {e}"
+
+@tool
+def gh_trigger_workflow(workflow_name_or_file: str, repo_dir: str = ".") -> str:
+    """Manually dispatches an on-demand run of a GitHub Actions workflow using 'gh workflow run'."""
+    try:
+        target = resolve_path(repo_dir)
+        wf = workflow_name_or_file.strip()
+        cmd = ["gh", "workflow", "run", wf]
+        res = _run_git_cmd(cmd, cwd=target, timeout=20)
+        if res.returncode != 0:
+            err = res.stderr.strip() or res.stdout.strip()
+            return f"Failed to trigger workflow '{wf}': {err}"
+        return f"Successfully triggered workflow '{wf}'! Run started on GitHub Actions.\n{res.stdout.strip()}"
+    except Exception as e:
+        return f"Error triggering workflow '{workflow_name_or_file}': {e}"
+
+@tool
+def gh_get_run_logs(run_id: str, repo_dir: str = ".") -> str:
+    """Fetches the full terminal execution logs of a specific GitHub Actions workflow run."""
+    try:
+        target = resolve_path(repo_dir)
+        clean_id = str(run_id).strip()
+        cmd = ["gh", "run", "view", clean_id, "--log"]
+        res = _run_git_cmd(cmd, cwd=target, timeout=25)
+        if res.returncode != 0:
+            err = res.stderr.strip() or res.stdout.strip()
+            return f"Failed to fetch logs for run #{clean_id}: {err}"
+        logs = res.stdout.strip()
+        lines = logs.splitlines()
+        if len(lines) > 1500:
+            return f"[Log truncated: showing last 1500 lines of {len(lines)}]\n" + "\n".join(lines[-1500:])
+        return logs or "(Run has no logs yet or is currently queued)"
+    except Exception as e:
+        return f"Error fetching logs for run #{run_id}: {e}"
+
+@tool
+def gh_set_secret(secret_name: str, secret_value: str, repo_dir: str = ".") -> str:
+    """Securely stores an encrypted secret in the GitHub repository (e.g. TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID)."""
+    try:
+        target = resolve_path(repo_dir)
+        name = secret_name.strip().upper()
+        val = secret_value.strip()
+        if not name or not val:
+            return "Error: secret_name and secret_value are both required."
+
+        cmd = ["gh", "secret", "set", name, "--body", val]
+        res = _run_git_cmd(cmd, cwd=target, timeout=15)
+        if res.returncode != 0:
+            err = res.stderr.strip() or res.stdout.strip()
+            return f"Failed to set secret '{name}': {err}"
+        return f"Successfully set encrypted secret '{name}' on GitHub repository."
+    except Exception as e:
+        return f"Error setting secret '{secret_name}': {e}"
+
+@tool
+def test_telegram_bot(bot_token: str, chat_id: str, message: str = "Test notification from John's Harness! 24/7 Cloud Scraper is working.") -> str:
+    """Sends a test Telegram alert using the Telegram Bot API to verify bot credentials."""
+    try:
+        token = bot_token.strip()
+        cid = chat_id.strip()
+        if not token or not cid:
+            return "Error: bot_token and chat_id are required."
+
+        url = f"https://api.telegram.org/bot{token}/sendMessage"
+        payload = json.dumps({
+            "chat_id": cid,
+            "text": message,
+            "parse_mode": "Markdown"
+        }).encode("utf-8")
+
+        req = urllib.request.Request(
+            url,
+            data=payload,
+            headers={"Content-Type": "application/json", "User-Agent": "JohnsHarness/1.0"}
+        )
+        with urllib.request.urlopen(req, timeout=12) as response:
+            body = response.read().decode("utf-8")
+            data = json.loads(body)
+            if data.get("ok"):
+                return f"Success! Telegram message sent to chat {cid}."
+            return f"Telegram API returned not ok: {body}"
+    except urllib.error.HTTPError as e:
+        err_msg = e.read().decode('utf-8', errors='replace')
+        return f"Telegram HTTP {e.code} Error: {err_msg}"
+    except Exception as e:
+        return f"Error contacting Telegram API: {e}"
+
+@tool
+def create_scraper_workflow(name: str, target_url: str, criteria: str = "", schedule_cron: str = "0 * * * *", telegram_notify: bool = True, repo_dir: str = ".") -> str:
+    """Generates an end-to-end 24/7 cloud scraper script in 'scrapers/' and a matching scheduled GitHub Actions workflow in '.github/workflows/'."""
+    try:
+        target = resolve_path(repo_dir)
+        safe_name = re.sub(r"[^a-zA-Z0-9_-]", "_", name.strip().lower())
+        if not safe_name:
+            safe_name = "custom_scraper"
+
+        # 1. Create directories
+        scrapers_dir = os.path.join(target, "scrapers")
+        data_dir = os.path.join(scrapers_dir, "data")
+        wf_dir = os.path.join(target, ".github", "workflows")
+        os.makedirs(scrapers_dir, exist_ok=True)
+        os.makedirs(data_dir, exist_ok=True)
+        os.makedirs(wf_dir, exist_ok=True)
+
+        # 2. Python scraper script template
+        scraper_template = r'''#!/usr/bin/env python3
+"""
+Autonomous Cloud Scraper: __SAFE_NAME__
+Target: __TARGET_URL__
+Criteria: __CRITERIA__
+Scheduled via GitHub Actions (Cron: __SCHEDULE_CRON__)
+"""
+import os
+import sys
+import json
+import re
+import urllib.request
+import urllib.parse
+from datetime import datetime
+
+TARGET_URL = "__TARGET_URL__"
+CRITERIA = "__CRITERIA__"
+DATA_FILE = os.path.join(os.path.dirname(__file__), "data", "__SAFE_NAME___results.json")
+
+def send_telegram(text: str):
+    token = os.environ.get("TELEGRAM_BOT_TOKEN")
+    chat_id = os.environ.get("TELEGRAM_CHAT_ID")
+    if not token or not chat_id:
+        print("[Telegram] Skipping notification: TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not set.")
+        return False
+    try:
+        url = f"https://api.telegram.org/bot{token}/sendMessage"
+        payload = json.dumps({
+            "chat_id": chat_id,
+            "text": text,
+            "parse_mode": "Markdown",
+            "disable_web_page_preview": False
+        }).encode("utf-8")
+        req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json", "User-Agent": "JohnsHarnessScraper/1.0"})
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            print("[Telegram] Notification sent successfully!")
+            return True
+    except Exception as e:
+        print(f"[Telegram] Failed to send notification: {e}")
+        return False
+
+def run_scrape():
+    print(f"[Scraper] Starting scrape for {TARGET_URL} at {datetime.now().isoformat()}...")
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"}
+    req = urllib.request.Request(TARGET_URL, headers=headers)
+    
+    try:
+        with urllib.request.urlopen(req, timeout=25) as resp:
+            html = resp.read().decode("utf-8", errors="replace")
+    except Exception as e:
+        print(f"[Error] Failed to fetch {TARGET_URL}: {e}")
+        sys.exit(1)
+
+    print(f"[Scraper] Successfully downloaded {len(html)} bytes from {TARGET_URL}.")
+
+    # Simple robust regex extraction for links and headings
+    items = []
+    matches = re.findall(r'<a\s+[^>]*href="([^"]+)"[^>]*>(.*?)</a>', html, re.IGNORECASE)
+    for href, text in matches:
+        clean_text = re.sub(r'<[^>]+>', '', text).strip()
+        if clean_text and len(clean_text) > 8 and not href.startswith('#') and not href.startswith('javascript:'):
+            full_url = urllib.parse.urljoin(TARGET_URL, href)
+            if CRITERIA:
+                keywords = [k.strip().lower() for k in CRITERIA.split() if len(k.strip()) > 2]
+                if any(kw in clean_text.lower() for kw in keywords):
+                    items.append({"title": clean_text, "url": full_url, "scraped_at": datetime.now().isoformat()})
+            else:
+                items.append({"title": clean_text, "url": full_url, "scraped_at": datetime.now().isoformat()})
+
+    # Deduplicate by url
+    unique_items = []
+    seen = set()
+    for item in items:
+        if item["url"] not in seen:
+            seen.add(item["url"])
+            unique_items.append(item)
+
+    print(f"[Scraper] Found {len(unique_items)} matching items.")
+
+    # Save to data directory
+    os.makedirs(os.path.dirname(DATA_FILE), exist_ok=True)
+    with open(DATA_FILE, "w", encoding="utf-8") as f:
+        json.dump(unique_items, f, indent=2, ensure_ascii=False)
+    print(f"[Scraper] Saved results to {DATA_FILE}.")
+
+    # Telegram notification summary
+    if unique_items:
+        top_items = unique_items[:5]
+        msg_lines = [
+            f"🚀 *Scraper Alert: __SAFE_NAME__*",
+            f"📍 *Source:* {TARGET_URL}",
+            f"🎯 *Matched:* {len(unique_items)} items",
+            ""
+        ]
+        for idx, itm in enumerate(top_items, 1):
+            msg_lines.append(f"{idx}. [{itm['title']}]({itm['url']})")
+        
+        if len(unique_items) > 5:
+            msg_lines.append(f"\\n_...and {len(unique_items) - 5} more items._")
+
+        send_telegram("\\n".join(msg_lines))
+    else:
+        print("[Scraper] No items matched criteria on this run.")
+
+if __name__ == "__main__":
+    run_scrape()
+'''
+        scraper_code = (
+            scraper_template
+            .replace("__SAFE_NAME__", safe_name)
+            .replace("__TARGET_URL__", target_url)
+            .replace("__CRITERIA__", criteria or "Extract top items/updates")
+            .replace("__SCHEDULE_CRON__", schedule_cron)
+        )
+
+        scraper_file = os.path.join(scrapers_dir, f"{safe_name}.py")
+        with open(scraper_file, "w", encoding="utf-8") as f:
+            f.write(scraper_code)
+
+        # 3. GitHub Actions workflow YAML
+        wf_template = '''name: __NAME__ (24/7 Scraper)
+
+on:
+  schedule:
+    - cron: '__SCHEDULE_CRON__'
+  workflow_dispatch:
+
+jobs:
+  scrape_and_notify:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Run Scraper
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          python scrapers/__SAFE_NAME__.py
+
+      - name: Upload Scraped Results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: __SAFE_NAME__-results
+          path: scrapers/data/
+          retention-days: 14
+'''
+        wf_yaml = (
+            wf_template
+            .replace("__NAME__", name)
+            .replace("__SAFE_NAME__", safe_name)
+            .replace("__SCHEDULE_CRON__", schedule_cron)
+        )
+
+        wf_file = os.path.join(wf_dir, f"{safe_name}.yml")
+        with open(wf_file, "w", encoding="utf-8") as f:
+            f.write(wf_yaml)
+
+        return (
+            f"Successfully created 24/7 scraper workflow '{safe_name}'!\n"
+            f"- Scraper script: scrapers/{safe_name}.py\n"
+            f"- GitHub Actions workflow: .github/workflows/{safe_name}.yml (Schedule: '{schedule_cron}')\n"
+            f"- Output data target: scrapers/data/{safe_name}_results.json\n\n"
+            f"Next steps:\n"
+            f"1. Configure your Telegram bot credentials (TELEGRAM_BOT_TOKEN & TELEGRAM_CHAT_ID) via 'gh_set_secret' or the Dashboard.\n"
+            f"2. Commit and push changes: call 'git_commit_and_push(commit_message=\"Add {safe_name} scraper workflow\")'.\n"
+            f"3. GitHub Actions will run automatically on the cron schedule, or trigger immediately via 'gh_trigger_workflow(\"{safe_name}.yml\")'."
+        )
+    except Exception as e:
+        return f"Error creating scraper workflow: {e}"
+

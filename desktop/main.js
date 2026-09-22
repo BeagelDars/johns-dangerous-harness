@@ -274,6 +274,27 @@ ipcMain.on('tasks:get_output', (event, { pid }) => {
   sendToPython({ action: 'get_process_output', pid });
 });
 
+// Cloud Scrapers & GitHub Actions IPC Listeners
+ipcMain.on('cloud:list_tasks', () => {
+  sendToPython({ action: 'cloud_list_tasks' });
+});
+
+ipcMain.on('cloud:trigger_run', (event, { workflow }) => {
+  sendToPython({ action: 'cloud_trigger_run', workflow });
+});
+
+ipcMain.on('cloud:get_logs', (event, { run_id }) => {
+  sendToPython({ action: 'cloud_get_logs', run_id });
+});
+
+ipcMain.on('cloud:set_telegram', (event, { bot_token, chat_id }) => {
+  sendToPython({ action: 'cloud_set_telegram', bot_token, chat_id });
+});
+
+ipcMain.on('cloud:test_telegram', (event, { bot_token, chat_id, message }) => {
+  sendToPython({ action: 'cloud_test_telegram', bot_token, chat_id, message });
+});
+
 ipcMain.handle('dialog:select_workspace', async () => {
   if (!mainWindow) return null;
   const result = await dialog.showOpenDialog(mainWindow, {

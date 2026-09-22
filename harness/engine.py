@@ -185,7 +185,8 @@ class AgentEngine:
         file_keys = ('file', 'read', 'write', 'create', 'delete', 'copy', 'move', 'directory', 'dir', 'folder', 'replace', 'edit', 'path', 'save')
         find_keys = ('find', 'search', 'grep', 'lookup', 'locate', 'where is', 'pattern')
         proc_keys = ('run', 'execute', 'powershell', 'cmd', 'bash', 'terminal', 'python', 'script', 'process', 'task', 'background', 'start', 'stop', 'kill', 'server', 'npm', 'node')
-        web_keys = ('search', 'web', 'google', 'duckduckgo', 'fetch', 'url', 'http', 'https', 'scrape', 'browse')
+        cloud_keys = ('cloud', 'scraper', 'scrape', 'workflow', 'action', 'actions', 'github action', 'telegram', 'cron', 'schedule', '24/7', 'bot', 'secret')
+        web_keys = ('search', 'web', 'google', 'duckduckgo', 'fetch', 'url', 'http', 'https', 'browse')
         calc_keys = ('calc', 'calculate', 'math', 'sqrt', 'expression', 'sum', 'multiply', 'divide', 'equation')
         doc_keys = ('doc', 'document', 'pdf', 'docx', 'xlsx', 'excel', 'csv', 'pptx')
         media_keys = ('image', 'screenshot', 'picture', 'photo', 'vision', 'ocr', 'open')
@@ -247,6 +248,14 @@ class AgentEngine:
 
         if any(k in text_corpus for k in ws_keys):
             chosen_names.update(['get_workspace', 'set_workspace', 'create_project', 'save_project_knowledge'])
+            matched_any_domain = True
+
+        if any(k in text_corpus for k in cloud_keys):
+            chosen_names.update([
+                'create_scraper_workflow', 'gh_list_workflows', 'gh_list_runs',
+                'gh_trigger_workflow', 'gh_get_run_logs', 'gh_set_secret',
+                'test_telegram_bot', 'git_commit_and_push', 'git_status'
+            ])
             matched_any_domain = True
 
         is_local = "localhost" in target_model.lower() or "127.0.0.1" in target_model.lower() or "qwen" in target_model.lower()

@@ -83,6 +83,43 @@ const lightboxImg = document.getElementById('lightboxImg');
 let stagedAttachments = []; // Array of { id, path, name, size, isImage, preview }
 let currentLightboxPath = null;
 
+// Cloud Tasks & GitHub Actions DOM Elements
+const cloudTasksBtn = document.getElementById('cloudTasksBtn');
+const cloudTasksDot = document.getElementById('cloudTasksDot');
+const cloudDashboardModal = document.getElementById('cloudDashboardModal');
+const cloudModalBackdrop = document.getElementById('cloudModalBackdrop');
+const cloudCloseBtn = document.getElementById('cloudCloseBtn');
+const cloudRefreshBtn = document.getElementById('cloudRefreshBtn');
+const cloudTelegramBtn = document.getElementById('cloudTelegramBtn');
+const closeTelegramPanelBtn = document.getElementById('closeTelegramPanelBtn');
+const cloudTelegramPanel = document.getElementById('cloudTelegramPanel');
+const telegramBotTokenInput = document.getElementById('telegramBotTokenInput');
+const telegramChatIdInput = document.getElementById('telegramChatIdInput');
+const saveTelegramSecretsBtn = document.getElementById('saveTelegramSecretsBtn');
+const testTelegramPingBtn = document.getElementById('testTelegramPingBtn');
+const telegramStatusMsg = document.getElementById('telegramStatusMsg');
+
+const cloudWorkflowsList = document.getElementById('cloudWorkflowsList');
+const cloudWorkflowsCount = document.getElementById('cloudWorkflowsCount');
+const cloudRunsList = document.getElementById('cloudRunsList');
+const cloudRunsCount = document.getElementById('cloudRunsCount');
+
+const cloudLogsTargetLabel = document.getElementById('cloudLogsTargetLabel');
+const copyCloudLogsBtn = document.getElementById('copyCloudLogsBtn');
+const cloudLogsTerminal = document.getElementById('cloudLogsTerminal');
+
+const cloudScriptsList = document.getElementById('cloudScriptsList');
+const cloudScriptFilename = document.getElementById('cloudScriptFilename');
+const copyCloudScriptBtn = document.getElementById('copyCloudScriptBtn');
+const cloudScriptCode = document.getElementById('cloudScriptCode');
+
+const statFilesCount = document.getElementById('statFilesCount');
+const statTotalBytes = document.getElementById('statTotalBytes');
+const cloudFilesList = document.getElementById('cloudFilesList');
+
+let cachedCloudData = null;
+let activeCloudScriptPath = null;
+
 let activeBackgroundTasks = [];
 let inspectedTaskId = null;
 const stoppingPids = new Set();
@@ -2635,6 +2672,45 @@ window.harness.onEvent((event) => {
     }
   }
 
+  else if (type === 'cloud_tasks_data') {
+    renderCloudTasksData(event);
+  }
+
+  else if (type === 'cloud_run_triggered') {
+    if (telegramStatusMsg) {
+      telegramStatusMsg.style.display = 'block';
+      telegramStatusMsg.style.color = '#34d399';
+      telegramStatusMsg.textContent = `Workflow run dispatched on GitHub Actions! (${event.workflow || ''})`;
+      setTimeout(() => { telegramStatusMsg.style.display = 'none'; }, 4000);
+    }
+    setTimeout(() => {
+      if (window.harness && window.harness.cloudListTasks) {
+        window.harness.cloudListTasks();
+      }
+    }, 1800);
+  }
+
+  else if (type === 'cloud_logs_data') {
+    renderCloudLogs(event.run_id, event.logs);
+  }
+
+  else if (type === 'cloud_telegram_configured') {
+    if (telegramStatusMsg) {
+      telegramStatusMsg.style.display = 'block';
+      telegramStatusMsg.style.color = '#34d399';
+      telegramStatusMsg.textContent = event.message || 'Secrets saved successfully!';
+    }
+  }
+
+  else if (type === 'cloud_telegram_tested') {
+    if (telegramStatusMsg) {
+      telegramStatusMsg.style.display = 'block';
+      const isOk = event.result && event.result.startsWith('Success');
+      telegramStatusMsg.style.color = isOk ? '#34d399' : 'var(--accent-red)';
+      telegramStatusMsg.textContent = event.result || 'Test completed.';
+    }
+  }
+
   else if (type === 'done') {
     stopThinking();
     stopTurnTimer();
@@ -2650,6 +2726,333 @@ window.harness.onEvent((event) => {
     activeToolCalls = [];
   }
 });
+
+// ==============================================================================
+// Cloud Scrapers & GitHub Actions UI Controller
+// ==============================================================================
+
+function openCloudDashboard() {
+  if (!cloudDashboardModal) return;
+  cloudDashboardModal.style.display = 'flex';
+  if (window.harness && window.harness.cloudListTasks) {
+    window.harness.cloudListTasks();
+  }
+}
+
+function closeCloudDashboard() {
+  if (!cloudDashboardModal) return;
+  cloudDashboardModal.style.display = 'none';
+  if (cloudTelegramPanel) cloudTelegramPanel.style.display = 'none';
+}
+
+if (cloudTasksBtn) cloudTasksBtn.addEventListener('click', openCloudDashboard);
+if (cloudCloseBtn) cloudCloseBtn.addEventListener('click', closeCloudDashboard);
+if (cloudModalBackdrop) cloudModalBackdrop.addEventListener('click', closeCloudDashboard);
+
+if (cloudRefreshBtn) {
+  cloudRefreshBtn.addEventListener('click', () => {
+    if (window.harness && window.harness.cloudListTasks) {
+      window.harness.cloudListTasks();
+    }
+  });
+}
+
+// Telegram panel toggling
+if (cloudTelegramBtn) {
+  cloudTelegramBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (!cloudTelegramPanel) return;
+    const isShown = cloudTelegramPanel.style.display !== 'none';
+    cloudTelegramPanel.style.display = isShown ? 'none' : 'block';
+    if (telegramStatusMsg) telegramStatusMsg.style.display = 'none';
+  });
+}
+
+if (closeTelegramPanelBtn) {
+  closeTelegramPanelBtn.addEventListener('click', () => {
+    if (cloudTelegramPanel) cloudTelegramPanel.style.display = 'none';
+  });
+}
+
+if (saveTelegramSecretsBtn) {
+  saveTelegramSecretsBtn.addEventListener('click', () => {
+    const token = (telegramBotTokenInput ? telegramBotTokenInput.value : '').trim();
+    const cid = (telegramChatIdInput ? telegramChatIdInput.value : '').trim();
+    if (!token || !cid) {
+      if (telegramStatusMsg) {
+        telegramStatusMsg.style.display = 'block';
+        telegramStatusMsg.style.color = 'var(--accent-red)';
+        telegramStatusMsg.textContent = 'Both Bot Token and Chat ID are required.';
+      }
+      return;
+    }
+    if (telegramStatusMsg) {
+      telegramStatusMsg.style.display = 'block';
+      telegramStatusMsg.style.color = 'var(--text-muted)';
+      telegramStatusMsg.textContent = 'Saving encrypted secrets to GitHub...';
+    }
+    if (window.harness && window.harness.cloudSetTelegram) {
+      window.harness.cloudSetTelegram(token, cid);
+    }
+  });
+}
+
+if (testTelegramPingBtn) {
+  testTelegramPingBtn.addEventListener('click', () => {
+    const token = (telegramBotTokenInput ? telegramBotTokenInput.value : '').trim();
+    const cid = (telegramChatIdInput ? telegramChatIdInput.value : '').trim();
+    if (!token || !cid) {
+      if (telegramStatusMsg) {
+        telegramStatusMsg.style.display = 'block';
+        telegramStatusMsg.style.color = 'var(--accent-red)';
+        telegramStatusMsg.textContent = 'Please enter Bot Token and Chat ID to test.';
+      }
+      return;
+    }
+    if (telegramStatusMsg) {
+      telegramStatusMsg.style.display = 'block';
+      telegramStatusMsg.style.color = 'var(--text-muted)';
+      telegramStatusMsg.textContent = 'Sending test ping via Telegram API...';
+    }
+    if (window.harness && window.harness.cloudTestTelegram) {
+      window.harness.cloudTestTelegram(token, cid, "Test alert from John's Harness! 24/7 Cloud Scraper connection verified.");
+    }
+  });
+}
+
+// Tab navigation
+const cloudTabs = document.querySelectorAll('.cloud-tab');
+cloudTabs.forEach(tab => {
+  tab.addEventListener('click', () => {
+    const target = tab.getAttribute('data-tab');
+    switchCloudTab(target);
+  });
+});
+
+function switchCloudTab(tabName) {
+  cloudTabs.forEach(t => t.classList.toggle('active', t.getAttribute('data-tab') === tabName));
+  const tabWorkflows = document.getElementById('cloudTabWorkflows');
+  const tabLogs = document.getElementById('cloudTabLogs');
+  const tabScripts = document.getElementById('cloudTabScripts');
+  const tabData = document.getElementById('cloudTabData');
+
+  if (tabWorkflows) tabWorkflows.classList.toggle('active', tabName === 'workflows');
+  if (tabLogs) tabLogs.classList.toggle('active', tabName === 'logs');
+  if (tabScripts) tabScripts.classList.toggle('active', tabName === 'scripts');
+  if (tabData) tabData.classList.toggle('active', tabName === 'data');
+}
+
+// Copy logs button
+if (copyCloudLogsBtn) {
+  copyCloudLogsBtn.addEventListener('click', () => {
+    const text = cloudLogsTerminal ? cloudLogsTerminal.innerText : '';
+    if (text) {
+      navigator.clipboard.writeText(text).then(() => {
+        copyCloudLogsBtn.textContent = 'copied!';
+        setTimeout(() => { copyCloudLogsBtn.textContent = 'copy logs'; }, 1500);
+      });
+    }
+  });
+}
+
+// Copy script button
+if (copyCloudScriptBtn) {
+  copyCloudScriptBtn.addEventListener('click', () => {
+    const text = cloudScriptCode ? cloudScriptCode.innerText : '';
+    if (text) {
+      navigator.clipboard.writeText(text).then(() => {
+        copyCloudScriptBtn.textContent = 'copied!';
+        setTimeout(() => { copyCloudScriptBtn.textContent = 'copy'; }, 1500);
+      });
+    }
+  });
+}
+
+function renderCloudTasksData(data) {
+  cachedCloudData = data;
+  const workflows = data.workflows || [];
+  const runs = data.runs || [];
+  const scrapers = data.scrapers || [];
+  const savedData = data.saved_data || [];
+
+  // Update badge dot if any run is active
+  const hasRunning = runs.some(r => r.status === 'in_progress' || r.status === 'queued');
+  if (cloudTasksDot) cloudTasksDot.classList.toggle('active', hasRunning);
+
+  // 1. Workflows
+  if (cloudWorkflowsCount) cloudWorkflowsCount.textContent = `${workflows.length} workflow${workflows.length === 1 ? '' : 's'}`;
+  if (cloudWorkflowsList) {
+    cloudWorkflowsList.innerHTML = '';
+    if (workflows.length === 0) {
+      cloudWorkflowsList.innerHTML = `<div class="cloud-empty-state">No cloud workflows found in .github/workflows.<br>Prompt John's Harness: <i>"Create a scraper for &lt;website&gt; every hour and alert my Telegram bot"</i>.</div>`;
+    } else {
+      workflows.forEach(wf => {
+        const card = document.createElement('div');
+        card.className = 'cloud-wf-card';
+        card.innerHTML = `
+          <div class="cloud-wf-info">
+            <span class="cloud-wf-name">${escapeHtml(wf.name || wf.file)}</span>
+            <div class="cloud-wf-meta">
+              <span>${escapeHtml(wf.file)}</span>
+              <span class="cloud-cron-badge">cron: ${escapeHtml(wf.cron)}</span>
+            </div>
+          </div>
+          <div class="cloud-wf-actions">
+            <button class="btn-run-action" data-wf="${escapeHtml(wf.file)}">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+              <span>Run Now</span>
+            </button>
+          </div>
+        `;
+        const runBtn = card.querySelector('.btn-run-action');
+        if (runBtn) {
+          runBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            runBtn.disabled = true;
+            runBtn.innerHTML = `<span>Dispatching...</span>`;
+            if (window.harness && window.harness.cloudTriggerRun) {
+              window.harness.cloudTriggerRun(wf.file);
+            }
+          });
+        }
+        cloudWorkflowsList.appendChild(card);
+      });
+    }
+  }
+
+  // 2. Runs
+  if (cloudRunsCount) cloudRunsCount.textContent = `${runs.length} run${runs.length === 1 ? '' : 's'}`;
+  if (cloudRunsList) {
+    cloudRunsList.innerHTML = '';
+    if (runs.length === 0) {
+      cloudRunsList.innerHTML = `<div class="cloud-empty-state">No GitHub Actions runs recorded yet. Click "Run Now" on a workflow above to execute on the cloud.</div>`;
+    } else {
+      runs.forEach(run => {
+        const row = document.createElement('div');
+        row.className = 'cloud-run-row';
+        const st = (run.status === 'completed' ? (run.conclusion || 'completed') : run.status).toLowerCase();
+        const badgeClass = st === 'success' ? 'success' : (st === 'in_progress' ? 'in_progress' : (st === 'failure' ? 'failure' : 'queued'));
+        
+        let dateStr = '';
+        if (run.createdAt) {
+          try {
+            const d = new Date(run.createdAt);
+            dateStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' ' + d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+          } catch(e) {}
+        }
+
+        row.innerHTML = `
+          <div class="cloud-run-left">
+            <span class="cloud-run-badge ${badgeClass}">${escapeHtml(st)}</span>
+            <span class="cloud-run-name">${escapeHtml(run.name || run.workflowName || 'Workflow Run')}</span>
+          </div>
+          <div class="cloud-run-right">
+            <span>#${escapeHtml(String(run.databaseId || ''))}</span>
+            <span>${escapeHtml(dateStr)}</span>
+            <button class="btn-ghost-sm" title="View Terminal Logs">Logs</button>
+          </div>
+        `;
+
+        row.addEventListener('click', () => {
+          if (run.databaseId && window.harness && window.harness.cloudGetLogs) {
+            if (cloudLogsTargetLabel) cloudLogsTargetLabel.textContent = `Fetching logs for run #${run.databaseId}...`;
+            if (cloudLogsTerminal) cloudLogsTerminal.textContent = 'Loading logs from GitHub Actions...';
+            switchCloudTab('logs');
+            window.harness.cloudGetLogs(run.databaseId);
+          }
+        });
+
+        cloudRunsList.appendChild(row);
+      });
+    }
+  }
+
+  // 3. Scrapers
+  if (cloudScriptsList) {
+    cloudScriptsList.innerHTML = '';
+    if (scrapers.length === 0) {
+      cloudScriptsList.innerHTML = `<div class="cloud-empty-state">No Python scripts in scrapers/</div>`;
+    } else {
+      scrapers.forEach((scr, idx) => {
+        const item = document.createElement('div');
+        item.className = `cloud-script-item ${idx === 0 ? 'active' : ''}`;
+        item.textContent = scr.file;
+        item.title = scr.path;
+        item.addEventListener('click', () => {
+          cloudScriptsList.querySelectorAll('.cloud-script-item').forEach(el => el.classList.remove('active'));
+          item.classList.add('active');
+          loadScriptSource(scr.path, scr.file);
+        });
+        cloudScriptsList.appendChild(item);
+      });
+
+      if (scrapers.length > 0) {
+        loadScriptSource(scrapers[0].path, scrapers[0].file);
+      }
+    }
+  }
+
+  // 4. Saved Data
+  if (statFilesCount) statFilesCount.textContent = String(savedData.length);
+  let totalB = 0;
+  savedData.forEach(d => totalB += (d.size_bytes || 0));
+  if (statTotalBytes) statTotalBytes.textContent = formatBytes(totalB);
+
+  if (cloudFilesList) {
+    cloudFilesList.innerHTML = '';
+    if (savedData.length === 0) {
+      cloudFilesList.innerHTML = `<div class="cloud-empty-state">No scraped datasets in scrapers/data/ yet. When scrapers finish, extracted datasets will appear here.</div>`;
+    } else {
+      savedData.forEach(f => {
+        const frow = document.createElement('div');
+        frow.className = 'cloud-file-row';
+        frow.innerHTML = `
+          <span class="cloud-file-name">${escapeHtml(f.file)}</span>
+          <div class="cloud-file-meta">
+            <span>${formatBytes(f.size_bytes || 0)}</span>
+            <button class="btn-ghost-sm" title="Open file in editor">Open</button>
+          </div>
+        `;
+        const openBtn = frow.querySelector('button');
+        if (openBtn) {
+          openBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (f.path && window.harness && window.harness.openFile) {
+              window.harness.openFile(f.path);
+            }
+          });
+        }
+        cloudFilesList.appendChild(frow);
+      });
+    }
+  }
+}
+
+function loadScriptSource(filePath, fileName) {
+  if (cloudScriptFilename) cloudScriptFilename.textContent = fileName || 'Script';
+  if (cloudScriptCode) cloudScriptCode.textContent = '# Loading script source...';
+  if (filePath) {
+    if (window.harness && window.harness.readFilePreview) {
+      window.harness.readFilePreview(filePath).then(res => {
+        if (res && res.text) {
+          if (cloudScriptCode) cloudScriptCode.textContent = res.text;
+        } else {
+          if (cloudScriptCode) cloudScriptCode.textContent = `# Source path: ${filePath}`;
+        }
+      }).catch(() => {
+        if (cloudScriptCode) cloudScriptCode.textContent = `# Source path: ${filePath}`;
+      });
+    }
+  }
+}
+
+function renderCloudLogs(runId, logs) {
+  if (cloudLogsTargetLabel) cloudLogsTargetLabel.textContent = `Terminal Execution Logs for Run #${runId}`;
+  if (cloudLogsTerminal) {
+    cloudLogsTerminal.textContent = stripAnsi(logs || '[No logs available]');
+    cloudLogsTerminal.scrollTop = cloudLogsTerminal.scrollHeight;
+  }
+}
 
 function escapeHtml(str) {
   return String(str)
@@ -2679,4 +3082,5 @@ if (window.harness) {
   if (window.harness.getStatus) window.harness.getStatus();
   if (window.harness.listProjects) window.harness.listProjects();
   if (window.harness.getBackgroundTasks) window.harness.getBackgroundTasks();
+  if (window.harness.cloudListTasks) window.harness.cloudListTasks();
 }

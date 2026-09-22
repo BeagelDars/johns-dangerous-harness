@@ -44,6 +44,14 @@
           </select>
         </div>
 
+        <button class="cloud-tasks-pill" id="cloudTasksBtn" title="Cloud Scrapers & GitHub Actions (24/7 Workflows)">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path>
+          </svg>
+          <span>Cloud Tasks</span>
+          <span class="cloud-tasks-dot" id="cloudTasksDot"></span>
+        </button>
+
         <button class="btn-ghost" id="clearBtn" title="Clear chat history">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
             <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
@@ -240,6 +248,151 @@
       </div>
       <div class="lightbox-body">
         <img id="lightboxImg" src="" alt="Full view" />
+      </div>
+    </div>
+  <!-- Cloud Scrapers & GitHub Actions Dashboard Modal -->
+  <div class="cloud-dashboard-modal" id="cloudDashboardModal" style="display: none;">
+    <div class="cloud-modal-backdrop" id="cloudModalBackdrop"></div>
+    <div class="cloud-modal-dialog">
+      <div class="cloud-modal-header">
+        <div class="cloud-header-left">
+          <div class="cloud-icon-badge">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path>
+            </svg>
+          </div>
+          <div class="cloud-header-titles">
+            <span class="cloud-modal-title">Cloud Scrapers &amp; GitHub Actions</span>
+            <span class="cloud-modal-subtitle">24/7 Autonomous Background Workers &bull; $0 Cloud Compute</span>
+          </div>
+        </div>
+        <div class="cloud-header-actions">
+          <button class="btn-ghost-sm" id="cloudRefreshBtn" title="Refresh workflows and runs">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="23 4 23 10 17 10"></polyline>
+              <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+            </svg>
+            <span>Refresh</span>
+          </button>
+          <button class="btn-ghost-sm" id="cloudTelegramBtn" title="Configure Telegram Bot Token &amp; Chat ID">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M22 2L11 13"></path>
+              <path d="M22 2l-7 20-4-9-9-4 20-7z"></path>
+            </svg>
+            <span>Telegram</span>
+          </button>
+          <button class="btn-ghost-sm" id="cloudCloseBtn" title="Close (Esc)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <div class="cloud-tabs">
+        <button class="cloud-tab active" data-tab="workflows">Workflows &amp; Runs</button>
+        <button class="cloud-tab" data-tab="logs">Execution Logs</button>
+        <button class="cloud-tab" data-tab="scripts">Scraper Scripts</button>
+        <button class="cloud-tab" data-tab="data">Saved Datasets</button>
+      </div>
+
+      <!-- Modal Body (Tab Views) -->
+      <div class="cloud-modal-body">
+        <!-- Workflows & Runs Tab -->
+        <div class="cloud-tab-content active" id="cloudTabWorkflows">
+          <div class="cloud-section">
+            <div class="cloud-section-header">
+              <span class="cloud-section-title">SCHEDULED CLOUD WORKFLOWS (.github/workflows)</span>
+              <span class="cloud-section-count" id="cloudWorkflowsCount">0 workflows</span>
+            </div>
+            <div class="cloud-cards-list" id="cloudWorkflowsList">
+              <div class="cloud-empty-state">No cloud workflows found in .github/workflows.<br>Prompt John's Harness: <i>"Create a scraper for &lt;website&gt; every hour and alert my Telegram bot"</i>.</div>
+            </div>
+          </div>
+
+          <div class="cloud-section" style="margin-top: 16px;">
+            <div class="cloud-section-header">
+              <span class="cloud-section-title">RECENT GITHUB ACTIONS EXECUTIONS</span>
+              <span class="cloud-section-count" id="cloudRunsCount">0 runs</span>
+            </div>
+            <div class="cloud-runs-list" id="cloudRunsList">
+              <div class="cloud-empty-state">No recent GitHub Actions runs recorded.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Terminal Logs Tab -->
+        <div class="cloud-tab-content" id="cloudTabLogs">
+          <div class="cloud-logs-toolbar">
+            <div class="cloud-logs-target" id="cloudLogsTargetLabel">Select a run from Workflows to view logs</div>
+            <button class="copy-btn" id="copyCloudLogsBtn">copy logs</button>
+          </div>
+          <pre class="cloud-logs-terminal" id="cloudLogsTerminal"><code>[Select a run from the Workflows & Runs tab to stream full terminal execution logs]</code></pre>
+        </div>
+
+        <!-- Scraper Scripts Tab -->
+        <div class="cloud-tab-content" id="cloudTabScripts">
+          <div class="cloud-scripts-grid">
+            <div class="cloud-scripts-sidebar" id="cloudScriptsList">
+              <div class="cloud-empty-state">No Python scripts in scrapers/</div>
+            </div>
+            <div class="cloud-scripts-viewer">
+              <div class="cloud-script-header">
+                <span id="cloudScriptFilename">Select a script to inspect</span>
+                <button class="copy-btn" id="copyCloudScriptBtn">copy</button>
+              </div>
+              <pre class="cloud-script-code" id="cloudScriptCode"><code># Python scraper source code will appear here</code></pre>
+            </div>
+          </div>
+        </div>
+
+        <!-- Saved Data & Storage Tab -->
+        <div class="cloud-tab-content" id="cloudTabData">
+          <div class="cloud-storage-summary" id="cloudStorageSummary">
+            <div class="cloud-stat-card">
+              <span class="stat-num" id="statFilesCount">0</span>
+              <span class="stat-label">Saved Datasets</span>
+            </div>
+            <div class="cloud-stat-card">
+              <span class="stat-num" id="statTotalBytes">0 KB</span>
+              <span class="stat-label">Total Storage Used</span>
+            </div>
+          </div>
+          <div class="cloud-files-list" id="cloudFilesList">
+            <div class="cloud-empty-state">No scraped datasets in scrapers/data/ yet.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Telegram Config Sub-panel -->
+      <div class="cloud-telegram-panel" id="cloudTelegramPanel" style="display: none;">
+        <div class="telegram-panel-header">
+          <div class="telegram-header-left">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13"></path><path d="M22 2l-7 20-4-9-9-4 20-7z"></path></svg>
+            <span>Telegram Bot Configuration</span>
+          </div>
+          <button class="btn-ghost-sm" id="closeTelegramPanelBtn">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          </button>
+        </div>
+        <div class="telegram-panel-body">
+          <p class="telegram-hint">Credentials are saved directly as encrypted GitHub Secrets (<code>TELEGRAM_BOT_TOKEN</code> &amp; <code>TELEGRAM_CHAT_ID</code>) in your repository via the authenticated GitHub CLI.</p>
+          <div class="telegram-input-row">
+            <label>Bot Token (@BotFather):</label>
+            <input type="password" id="telegramBotTokenInput" placeholder="e.g. 7123456789:AAHfk3x..." autocomplete="off" />
+          </div>
+          <div class="telegram-input-row">
+            <label>Chat ID (@userinfobot):</label>
+            <input type="text" id="telegramChatIdInput" placeholder="e.g. 123456789 or -100123456789" />
+          </div>
+          <div class="telegram-actions-bar">
+            <button class="btn-action-primary" id="saveTelegramSecretsBtn">Save to GitHub Secrets</button>
+            <button class="btn-action-secondary" id="testTelegramPingBtn">Send Test Ping</button>
+          </div>
+          <div class="telegram-status-msg" id="telegramStatusMsg" style="display: none;"></div>
+        </div>
       </div>
     </div>
   </div>
