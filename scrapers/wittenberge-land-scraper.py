@@ -108,29 +108,47 @@ def safe_log(msg: str):
             pass
 
 def send_telegram(text: str, chat_id: str = CLIENT_CHAT_ID) -> bool:
-    """Dispatches Telegram Markdown message to client."""
+    """Dispatches Telegram Markdown message to client with automatic plain text fallback."""
     if not BOT_TOKEN or not chat_id:
         safe_log("[Telegram] Warning: BOT_TOKEN or chat_id not configured.")
         return False
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    payload = json.dumps({
+        "chat_id": chat_id,
+        "text": text,
+        "parse_mode": "Markdown",
+        "disable_web_page_preview": False
+    }).encode("utf-8")
+    req = urllib.request.Request(
+        url,
+        data=payload,
+        headers={
+            "Content-Type": "application/json",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        }
+    )
     try:
-        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-        payload = json.dumps({
-            "chat_id": chat_id,
-            "text": text,
-            "parse_mode": "Markdown",
-            "disable_web_page_preview": False
-        }).encode("utf-8")
-        req = urllib.request.Request(
-            url,
-            data=payload,
-            headers={
-                "Content-Type": "application/json",
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-            }
-        )
         with urllib.request.urlopen(req, timeout=15) as resp:
             safe_log(f"[Telegram] Alert delivered successfully to {CLIENT_NAME} (ID: {chat_id})!")
             return True
+    except urllib.error.HTTPError as e:
+        if e.code == 400:
+            safe_log(f"[Telegram] Markdown entity error. Retrying in clean plain text...")
+            try:
+                clean_text = text.replace("*", "").replace("`", "").replace("_", "")
+                plain_payload = json.dumps({
+                    "chat_id": chat_id,
+                    "text": clean_text,
+                    "disable_web_page_preview": False
+                }).encode("utf-8")
+                req2 = urllib.request.Request(url, data=plain_payload, headers={"Content-Type": "application/json", "User-Agent": "Mozilla/5.0"})
+                with urllib.request.urlopen(req2, timeout=15) as resp2:
+                    safe_log(f"[Telegram] Alert delivered as plain text fallback!")
+                    return True
+            except Exception as e2:
+                safe_log(f"[Telegram] Plaintext fallback failed: {e2}")
+        safe_log(f"[Telegram] HTTP Error {e.code}: {e.reason}")
+        return False
     except Exception as e:
         safe_log(f"[Telegram] Failed to send alert: {e}")
         return False
@@ -138,19 +156,22 @@ def send_telegram(text: str, chat_id: str = CLIENT_CHAT_ID) -> bool:
 # ==============================================================================
 # Step 0: Robust DOM Scraper for Kleinanzeigen
 # ==============================================================================
-def fetch_url(url: str) -> str:
+def fetch_url(url: str, retries: int = 2) -> str:
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Language": "de-DE,de;q=0.9,en;q=0.8"
     }
-    req = urllib.request.Request(url, headers=headers)
-    try:
-        with urllib.request.urlopen(req, timeout=25) as resp:
-            return resp.read().decode("utf-8", errors="replace")
-    except Exception as e:
-        safe_log(f"[Scraper] Failed to fetch {url}: {e}")
-        return ""
+    for attempt in range(retries):
+        try:
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req, timeout=25) as resp:
+                return resp.read().decode("utf-8", errors="replace")
+        except Exception as e:
+            safe_log(f"[Scraper] Attempt {attempt + 1} failed for {url}: {e}")
+            if attempt < retries - 1:
+                time.sleep(3)
+    return ""
 
 def parse_html_listings(html: str) -> list:
     """Extracts raw candidate listings from search results."""
@@ -227,7 +248,7 @@ def parse_html_listings(html: str) -> list:
 # Step 1: Fast Deterministic Python Pre-Filter
 # ==============================================================================
 def python_pre_filter(item: dict) -> bool:
-    """Strict initial filter to eliminate wanted ads, leases, and obvious non-plots."""
+    """Strict initial filter to eliminate wanted ads, leases, pure forest, and out-of-bound sizes."""
     title_lower = (item.get("title") or "").lower()
     desc_lower = (item.get("description") or "").lower()
     specs_lower = (item.get("specs") or "").lower()
@@ -253,12 +274,35 @@ def python_pre_filter(item: dict) -> bool:
     if any(k in title_lower for k in junk_kw):
         return False
 
-    # 4. Check for positive plot / land indications
-    land_kw = ["grundstück", "grundstueck", "baugrundstück", "acker", "ackerland", "wald", "forst", "wiese", "gartenland", "fläche", "bauland", "parzelle", "neubaufläche"]
+    # 4. Reject pure forest / auction timber items (client specifically wants village/building plots)
+    if "auktion - wald" in title_lower or "waldfläche" in title_lower or "waldgrundstück" in title_lower:
+        return False
+
+    # 5. Reject obvious huge agricultural acreage (>1.2 ha = 12,000 m²) or tiny garden shed (<400 m²)
+    ha_match = re.search(r'(\d+(?:[,\.]\d+)?)\s*(?:ha|hektar)', full_text)
+    if ha_match:
+        try:
+            val = float(ha_match.group(1).replace(",", "."))
+            if val > 1.2:
+                return False
+        except Exception:
+            pass
+
+    sqm_match = re.search(r'(\d+(?:[,\.]\d+)?)\s*(?:m²|qm|m2)', full_text)
+    if sqm_match:
+        try:
+            val = float(sqm_match.group(1).replace(".", "").replace(",", "."))
+            if val < 400 or val > 15000:
+                return False
+        except Exception:
+            pass
+
+    # 6. Check for positive plot / land indications
+    land_kw = ["grundstück", "grundstueck", "baugrundstück", "acker", "ackerland", "wiese", "gartenland", "fläche", "bauland", "parzelle", "neubaufläche"]
     if not any(k in full_text for k in land_kw):
         return False
 
-    # 5. Must have valid URL
+    # 7. Must have valid URL
     if not item.get("url") or "/s-anzeige/" not in item["url"]:
         return False
 
@@ -281,13 +325,13 @@ def groq_evaluate_listings(candidates: list) -> list:
 
     safe_log(f"[Groq AI] Auditing {len(candidates)} pre-filtered listings with zero-hallucination percentage scoring...")
 
-    models = ["openai/gpt-oss-120b", "qwen/qwen3.8-27b"]
-    chunk_size = 5
+    models = ["openai/gpt-oss-120b", "qwen/qwen3.8-27b", "openai/gpt-oss-20b"]
+    chunk_size = 4
     evaluated_results = []
 
     for i in range(0, len(candidates), chunk_size):
         if i > 0:
-            time.sleep(2.5)  # Pace requests to respect Groq TPM limits
+            time.sleep(3.5)  # Pace requests to respect Groq TPM limits
         chunk = candidates[i:i + chunk_size]
         items_payload = []
         for c in chunk:
@@ -413,8 +457,10 @@ Return JSON:
 
                 except urllib.error.HTTPError as e:
                     if e.code == 429:
-                        safe_log(f"[Groq AI] Rate limit (429). Sleeping 6s before retry...")
-                        time.sleep(6)
+                        retry_after = e.headers.get("Retry-After") if hasattr(e, 'headers') else None
+                        wait_sec = float(retry_after) if retry_after else 12.0
+                        safe_log(f"[Groq AI] Rate limit (429). Sleeping {wait_sec}s before retry...")
+                        time.sleep(wait_sec)
                         continue
                     else:
                         safe_log(f"[Groq AI] Model {model_name} HTTP {e.code}: {e.reason}. Trying next model...")
@@ -844,6 +890,9 @@ def run():
 
     all_raw = list(raw_listings_map.values())
     safe_log(f"[Step 0] Total unique listings extracted: {len(all_raw)}")
+    if not all_raw:
+        safe_log("[Scraper] Warning: 0 listings returned from network. Preserving existing results to prevent data wipe during network outage.")
+        return
 
     # 2. Step 1: Deterministic Python Pre-Filter
     step1_candidates = [it for it in all_raw if python_pre_filter(it)]
