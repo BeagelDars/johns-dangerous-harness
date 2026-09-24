@@ -1,0 +1,14 @@
+[
+  {
+    "timestamp": "2026-09-24 23:14:04 UTC",
+    "total_scanned": 23,
+    "matches_found": 3,
+    "telegram_alerts_sent": 3
+  },
+  {
+    "timestamp": "2026-09-24 23:11:55 UTC",
+    "total_scanned": 23,
+    "matches_found": 10,
+    "telegram_alerts_sent": 10
+  }
+]
