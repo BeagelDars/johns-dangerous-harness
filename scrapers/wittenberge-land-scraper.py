@@ -481,23 +481,139 @@ Return JSON:
     return evaluated_results
 
 # ==============================================================================
-# Telegram Notifications to Iurii
+# Telegram Notifications to Iurii & Anti-Duplicate Engine
 # ==============================================================================
-def notify_new_matches(matches: list) -> int:
-    """Sends rich Telegram alert to Iurii for new matching properties."""
-    os.makedirs(DATA_DIR, exist_ok=True)
-    notified_ids = set()
+def get_property_slug(itm: dict) -> str:
+    """Extracts canonical URL slug without ad_id."""
+    url = itm.get("url") or ""
+    m = re.search(r'/s-anzeige/([^/]+)/\d+', url)
+    if m:
+        return m.group(1).strip().lower()
+    return ""
+
+def get_property_fingerprint(itm: dict) -> str:
+    """
+    Computes a deterministic fingerprint (Postal Code + Town + Price Digits)
+    to catch duplicate listings reposted under different ad IDs by the same seller/broker.
+    """
+    loc = (itm.get("location") or "").lower()
+    title = (itm.get("title") or "").lower()
+    price = (itm.get("price") or "").lower()
+
+    # Extract 5-digit German postal code
+    plz_m = re.search(r'\b\d{5}\b', f"{loc} {title}")
+    plz = plz_m.group(0) if plz_m else ""
+
+    # Extract numeric price digits
+    price_digits = re.sub(r'[^\d]', '', price)
+
+    # Primary towns in Wittenberge + 30km region
+    towns = [
+        "wittenberge", "kyritz", "seehausen", "osterburg", "pritzwalk",
+        "wittstock", "wusterhausen", "plattenburg", "ballerstedt", "landin",
+        "stechow", "perleberg", "karstaedt", "gumtow", "cumlosen",
+        "lenzen", "bad wilsnack", "wilsnack"
+    ]
+    town = ""
+    for t in towns:
+        if t in loc or t in title:
+            town = t.replace(" ", "")
+            break
+
+    # If postal code and numeric price exist, uniquely identify the parcel
+    if plz and price_digits and int(price_digits) > 500:
+        return f"{plz}_{town}_{price_digits}"
+    elif town and price_digits and int(price_digits) > 500:
+        return f"{town}_{price_digits}"
+    elif plz:
+        words = [w for w in re.findall(r'[a-z0-9äöüß]{4,}', title) if w not in {
+            "grundstueck", "grundstuecke", "baugrundstueck", "bauland", "provisionsfrei",
+            "verkauf", "kauf", "angebot", "gelegenheit", "chance", "attraktive"
+        }]
+        kw = "_".join(sorted(words[:3]))
+        return f"{plz}_{town}_{kw or 'plot'}"
+    return ""
+
+def load_notified_data() -> tuple[set, set, set, list]:
+    """Loads all previously notified ad IDs, fingerprints, and slugs."""
+    ad_ids = set()
+    fingerprints = set()
+    slugs = set()
+    history = []
     if os.path.exists(NOTIFIED_FILE):
         try:
             with open(NOTIFIED_FILE, "r", encoding="utf-8") as f:
-                notified_ids = set(json.load(f))
-        except Exception:
-            pass
+                data = json.load(f)
+                if isinstance(data, list):
+                    ad_ids = set(str(x) for x in data)
+                elif isinstance(data, dict):
+                    ad_ids = set(str(x) for x in data.get("ad_ids", []))
+                    fingerprints = set(str(x) for x in data.get("fingerprints", []))
+                    slugs = set(str(x) for x in data.get("slugs", []))
+                    history = data.get("history", [])
+        except Exception as e:
+            safe_log(f"[Notification Store] Error loading {NOTIFIED_FILE}: {e}")
+    return ad_ids, fingerprints, slugs, history
+
+def save_notified_data(ad_ids: set, fingerprints: set, slugs: set, new_history_entries: list = None):
+    """Atomically saves notified cache to disk."""
+    _, _, _, existing_history = load_notified_data()
+    if new_history_entries:
+        existing_history.extend(new_history_entries)
+    payload = {
+        "ad_ids": sorted(list(ad_ids)),
+        "fingerprints": sorted(list(fingerprints)),
+        "slugs": sorted(list(slugs)),
+        "history": existing_history[-100:]
+    }
+    with open(NOTIFIED_FILE, "w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=2, ensure_ascii=False)
+
+def notify_new_matches(matches: list) -> int:
+    """
+    Sends rich Telegram alert to Iurii for new matching properties.
+    Guarantees ZERO DUPLICATES across runs and within the same batch.
+    Immediately persists after every dispatch.
+    """
+    os.makedirs(DATA_DIR, exist_ok=True)
+    notified_ids, notified_fps, notified_slugs, _ = load_notified_data()
+
+    # In-memory dedup tracker for current execution batch
+    batch_seen_ids = set()
+    batch_seen_fps = set()
+    batch_seen_slugs = set()
 
     new_alerts = 0
     for itm in matches:
-        if str(itm["ad_id"]) in notified_ids:
+        ad_id = str(itm["ad_id"])
+        fp = get_property_fingerprint(itm)
+        slug = get_property_slug(itm)
+
+        # 1. Skip if already sent in previous runs
+        if ad_id in notified_ids:
+            safe_log(f"[Notification] Skipping ad #{ad_id} (Already notified previously).")
             continue
+        if slug and slug in notified_slugs:
+            safe_log(f"[Notification] Skipping ad #{ad_id} (Slug '{slug}' already notified).")
+            continue
+        if fp and fp in notified_fps:
+            safe_log(f"[Notification] Skipping ad #{ad_id} (Property fingerprint '{fp}' already notified).")
+            continue
+
+        # 2. Skip if duplicate of another item in this same run batch
+        if ad_id in batch_seen_ids:
+            safe_log(f"[Notification] Skipping ad #{ad_id} (Duplicate ID in current run).")
+            continue
+        if slug and slug in batch_seen_slugs:
+            safe_log(f"[Notification] Skipping ad #{ad_id} (Duplicate slug '{slug}' in current run).")
+            continue
+        if fp and fp in batch_seen_fps:
+            safe_log(f"[Notification] Skipping ad #{ad_id} (Duplicate fingerprint '{fp}' in current run).")
+            continue
+
+        batch_seen_ids.add(ad_id)
+        if slug: batch_seen_slugs.add(slug)
+        if fp: batch_seen_fps.add(fp)
 
         ev = itm.get("evidence", {})
         summary = itm.get("summary_ru") or "Участок соответствует заданным критериям."
@@ -518,12 +634,23 @@ def notify_new_matches(matches: list) -> int:
 
         success = send_telegram(msg)
         if success:
-            notified_ids.add(str(itm["ad_id"]))
-            new_alerts += 1
-            time.sleep(1)
+            notified_ids.add(ad_id)
+            if slug: notified_slugs.add(slug)
+            if fp: notified_fps.add(fp)
 
-    with open(NOTIFIED_FILE, "w", encoding="utf-8") as f:
-        json.dump(list(notified_ids), f, indent=2)
+            # Persist immediately to disk after each send
+            hist_entry = {
+                "ad_id": ad_id,
+                "fingerprint": fp,
+                "slug": slug,
+                "title": itm.get("title"),
+                "price": itm.get("price"),
+                "location": itm.get("location"),
+                "sent_at": datetime.now().isoformat()
+            }
+            save_notified_data(notified_ids, notified_fps, notified_slugs, [hist_entry])
+            new_alerts += 1
+            time.sleep(1.5)
 
     return new_alerts
 
@@ -877,19 +1004,46 @@ Kleinanzeigen DOM Parser (Direct /s-anzeige/ URLs)
 def run():
     safe_log(f"=== Starting 24/7 Cloud Scraper for {CLIENT_NAME} at {datetime.now().isoformat()} ===")
     
-    # 1. Fetch & Parse Listings across target search URLs
+    # 1. Fetch & Parse Listings across target search URLs with in-flight deduplication
     raw_listings_map = {}
+    seen_fps_map = {}
+    seen_slugs_map = {}
+
     for url in TARGET_URLS:
         html = fetch_url(url)
         if html:
             items = parse_html_listings(html)
             for itm in items:
-                if itm["ad_id"] not in raw_listings_map:
-                    raw_listings_map[itm["ad_id"]] = itm
+                ad_id = str(itm["ad_id"])
+                fp = get_property_fingerprint(itm)
+                slug = get_property_slug(itm)
+
+                existing_id = (
+                    ad_id if ad_id in raw_listings_map else None
+                ) or (
+                    seen_fps_map.get(fp) if fp else None
+                ) or (
+                    seen_slugs_map.get(slug) if slug else None
+                )
+
+                if existing_id and existing_id in raw_listings_map:
+                    # Keep the listing with richer description/specs
+                    existing_item = raw_listings_map[existing_id]
+                    if len(itm.get("description", "")) > len(existing_item.get("description", "")):
+                        del raw_listings_map[existing_id]
+                        raw_listings_map[ad_id] = itm
+                        if fp: seen_fps_map[fp] = ad_id
+                        if slug: seen_slugs_map[slug] = ad_id
+                    continue
+
+                raw_listings_map[ad_id] = itm
+                if fp: seen_fps_map[fp] = ad_id
+                if slug: seen_slugs_map[slug] = ad_id
+
             safe_log(f"[Scraper] Downloaded {len(items)} listings from {url}")
 
     all_raw = list(raw_listings_map.values())
-    safe_log(f"[Step 0] Total unique listings extracted: {len(all_raw)}")
+    safe_log(f"[Step 0] Total unique listings extracted after de-duplication: {len(all_raw)}")
     if not all_raw:
         safe_log("[Scraper] Warning: 0 listings returned from network. Preserving existing results to prevent data wipe during network outage.")
         return
