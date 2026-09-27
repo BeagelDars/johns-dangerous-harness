@@ -1,362 +1,356 @@
 {
-  "last_updated": "2026-09-27T13:36:21.422982",
+  "last_updated": "2026-09-27T19:36:45.902228",
   "location": "Wittenberge 19322",
   "criteria": "Grundstück / Land / Baugrundstück 1000 - 5000 m²",
-  "total_items": 59,
+  "total_items": 58,
   "items": [
-    {
-      "title": "Haus & Garten",
-      "url": "https://www.kleinanzeigen.de/s-haus-garten/c80",
-      "source": "Kleinanzeigen",
-      "scraped_at": "2026-09-27T13:36:20.245724"
-    },
     {
       "title": "Baugrundstück",
       "url": "https://www.kleinanzeigen.de/s-grundstuecke-garten/baugrundstueck/wittenberge/c207l7865+grundstuecke_garten.type_s:baugrundstueck",
       "source": "Kleinanzeigen",
-      "scraped_at": "2026-09-27T13:36:20.245947"
+      "scraped_at": "2026-09-27T19:36:44.117212"
     },
     {
       "title": "Neubaufläche in Top-Lage von Wittenberge",
       "url": "https://www.kleinanzeigen.de/s-anzeige/neubauflaeche-in-top-lage-von-wittenberge/2969999189-207-7872",
       "source": "Kleinanzeigen",
-      "scraped_at": "2026-09-27T13:36:20.246064"
+      "scraped_at": "2026-09-27T19:36:44.117336"
     },
     {
       "title": "Land- und Forstgrundstück - Immobilienchance für Käufer ohne Provision",
       "url": "https://www.kleinanzeigen.de/s-anzeige/land-und-forstgrundstueck-immobilienchance-fuer-kaeufer-ohne-provision/3523749206-207-7872",
       "source": "Kleinanzeigen",
-      "scraped_at": "2026-09-27T13:36:20.246090"
+      "scraped_at": "2026-09-27T19:36:44.117358"
     },
     {
       "title": "Grundstück mit Laube",
       "url": "https://www.kleinanzeigen.de/s-anzeige/grundstueck-mit-laube/3523611562-207-7872",
       "source": "Kleinanzeigen",
-      "scraped_at": "2026-09-27T13:36:20.246108"
+      "scraped_at": "2026-09-27T19:36:44.117375"
     },
     {
       "title": "Garten. Abzugeben. In Wittenberge",
       "url": "https://www.kleinanzeigen.de/s-anzeige/garten-abzugeben-in-wittenberge/3518845778-207-7872",
       "source": "Kleinanzeigen",
-      "scraped_at": "2026-09-27T13:36:20.246126"
+      "scraped_at": "2026-09-27T19:36:44.117392"
     },
     {
       "title": "Land- / Forstwirtschaft in 19322 Wittenberge Provisionsfrei - schnell sein!",
       "url": "https://www.kleinanzeigen.de/s-anzeige/land-forstwirtschaft-in-19322-wittenberge-provisionsfrei-schnell-sein-/3437677031-207-7872",
       "source": "Kleinanzeigen",
-      "scraped_at": "2026-09-27T13:36:20.246144"
+      "scraped_at": "2026-09-27T19:36:44.117410"
     },
     {
       "title": "Großzügiges Wohnbaugrundstück in Wentdorf – viel Platz für Ihren Wohntraum",
       "url": "https://www.kleinanzeigen.de/s-anzeige/grosszuegiges-wohnbaugrundstueck-in-wentdorf-viel-platz-fuer-ihren-wohntraum/3512748293-207-7872",
       "source": "Kleinanzeigen",
-      "scraped_at": "2026-09-27T13:36:20.246167"
+      "scraped_at": "2026-09-27T19:36:44.117432"
     },
     {
       "title": "Freizeitgrundstück in Wittenberge zu verkaufen",
       "url": "https://www.kleinanzeigen.de/s-anzeige/freizeitgrundstueck-in-wittenberge-zu-verkaufen/3382496752-207-7872",
       "source": "Kleinanzeigen",
-      "scraped_at": "2026-09-27T13:36:20.246186"
+      "scraped_at": "2026-09-27T19:36:44.117450"
     },
     {
       "title": "Schönes Grundstück in ruhiger Dorflage",
       "url": "https://www.kleinanzeigen.de/s-anzeige/schoenes-grundstueck-in-ruhiger-dorflage/3448636024-207-7872",
       "source": "Kleinanzeigen",
-      "scraped_at": "2026-09-27T13:36:20.246204"
+      "scraped_at": "2026-09-27T19:36:44.117467"
     },
     {
       "title": "Baugrundstück Top-Lage Wittenberge | Elbnähe | 630m² |erschlossen",
       "url": "https://www.kleinanzeigen.de/s-anzeige/baugrundstueck-top-lage-wittenberge-elbnaehe-630m-erschlossen/3489482978-207-7872",
       "source": "Kleinanzeigen",
-      "scraped_at": "2026-09-27T13:36:20.246223"
+      "scraped_at": "2026-09-27T19:36:44.117485"
     },
     {
       "title": "Wohngrundstück in Hansestadt Seehausen zu verkaufen.",
       "url": "https://www.kleinanzeigen.de/s-anzeige/wohngrundstueck-in-hansestadt-seehausen-zu-verkaufen-/3288894389-207-20113",
       "source": "Kleinanzeigen",
-      "scraped_at": "2026-09-27T13:36:20.246294"
+      "scraped_at": "2026-09-27T19:36:44.117553"
     },
     {
       "title": "Bebaubares Grundstück im Ortskern von Seehausen - nur Versteigerung - keine Käuferprovision",
       "url": "https://www.kleinanzeigen.de/s-anzeige/bebaubares-grundstueck-im-ortskern-von-seehausen-nur-versteigerung-keine-kaeuferprovision/3335764108-207-20113",
       "source": "Kleinanzeigen",
-      "scraped_at": "2026-09-27T13:36:20.246314"
+      "scraped_at": "2026-09-27T19:36:44.117576"
     },
     {
       "title": "Unbebautes Grundstück - Ihre Immobiliengelegenheit – provisionsfrei",
       "url": "https://www.kleinanzeigen.de/s-anzeige/unbebautes-grundstueck-ihre-immobiliengelegenheit-provisionsfrei/3523753795-207-20113",
       "source": "Kleinanzeigen",
-      "scraped_at": "2026-09-27T13:36:20.246335"
+      "scraped_at": "2026-09-27T19:36:44.117596"
     },
     {
       "title": "Grundstück in 39615 Seehausen Provisionsfrei - schnell sein!",
       "url": "https://www.kleinanzeigen.de/s-anzeige/grundstueck-in-39615-seehausen-provisionsfrei-schnell-sein-/3463937957-207-20113",
       "source": "Kleinanzeigen",
-      "scraped_at": "2026-09-27T13:36:20.246353"
+      "scraped_at": "2026-09-27T19:36:44.117613"
     },
     {
       "title": "Gartengrundstück",
       "url": "https://www.kleinanzeigen.de/s-anzeige/gartengrundstueck/3514311071-207-7875",
       "source": "Kleinanzeigen",
-      "scraped_at": "2026-09-27T13:36:20.246370"
+      "scraped_at": "2026-09-27T19:36:44.117628"
     },
     {
       "title": "Wald zu verkaufen - 5,9133 ha",
       "url": "https://www.kleinanzeigen.de/s-anzeige/wald-zu-verkaufen-5-9133-ha/3514774340-207-7875",
       "source": "Kleinanzeigen",
-      "scraped_at": "2026-09-27T13:36:20.246387"
+      "scraped_at": "2026-09-27T19:36:44.117645"
     },
     {
       "title": "Baugrundstück mit angrenzendem Grünland/Ackerfläche gesucht",
       "url": "https://www.kleinanzeigen.de/s-anzeige/baugrundstueck-mit-angrenzendem-gruenland-ackerflaeche-gesucht/3498031429-207-7875",
       "source": "Kleinanzeigen",
-      "scraped_at": "2026-09-27T13:36:20.246405"
+      "scraped_at": "2026-09-27T19:36:44.117662"
     },
     {
       "title": "Grüne Oase im Hagen – Wochenendgrundstück mit massiver Laube zum Entspannen und Durchatmen",
       "url": "https://www.kleinanzeigen.de/s-anzeige/gruene-oase-im-hagen-wochenendgrundstueck-mit-massiver-laube-zum-entspannen-und-durchatmen/3399478910-207-7875",
       "source": "Kleinanzeigen",
-      "scraped_at": "2026-09-27T13:36:20.246430"
+      "scraped_at": "2026-09-27T19:36:44.117689"
     },
     {
       "title": "Garten in Wittenberge",
       "url": "https://www.kleinanzeigen.de/s-grundstuecke-garten/garten/wittenberge/c207l7865+grundstuecke_garten.type_s:garten",
       "source": "Kleinanzeigen",
-      "scraped_at": "2026-09-27T13:36:20.246758"
+      "scraped_at": "2026-09-27T19:36:44.118010"
     },
     {
       "title": "Land-/Forstwirtschaft in Wittenberge",
       "url": "https://www.kleinanzeigen.de/s-grundstuecke-garten/land_forstwirtschaft/wittenberge/c207l7865+grundstuecke_garten.type_s:land_forstwirtschaft",
       "source": "Kleinanzeigen",
-      "scraped_at": "2026-09-27T13:36:20.246770"
+      "scraped_at": "2026-09-27T19:36:44.118022"
     },
     {
       "title": "Weitere Grundstücke &amp; Gärten in Wittenberge",
       "url": "https://www.kleinanzeigen.de/s-grundstuecke-garten/andere/wittenberge/c207l7865+grundstuecke_garten.type_s:andere",
       "source": "Kleinanzeigen",
-      "scraped_at": "2026-09-27T13:36:20.246786"
+      "scraped_at": "2026-09-27T19:36:44.118037"
     },
     {
       "title": "Auf Zeit &amp; WG in Wittenberge",
       "url": "https://www.kleinanzeigen.de/s-auf-zeit-wg/wittenberge/c199l7865",
       "source": "Kleinanzeigen",
-      "scraped_at": "2026-09-27T13:36:20.246807"
+      "scraped_at": "2026-09-27T19:36:44.118051"
     },
     {
       "title": "Container in Wittenberge",
       "url": "https://www.kleinanzeigen.de/s-container/wittenberge/c402l7865",
       "source": "Kleinanzeigen",
-      "scraped_at": "2026-09-27T13:36:20.246821"
+      "scraped_at": "2026-09-27T19:36:44.118064"
     },
     {
       "title": "Eigentumswohnungen in Wittenberge",
       "url": "https://www.kleinanzeigen.de/s-wohnung-kaufen/wittenberge/c196l7865",
       "source": "Kleinanzeigen",
-      "scraped_at": "2026-09-27T13:36:20.246835"
+      "scraped_at": "2026-09-27T19:36:44.118078"
     },
     {
       "title": "Ferien- &amp; Auslandsimmobilien in Wittenberge",
       "url": "https://www.kleinanzeigen.de/s-ferienwohnung-ferienhaus/wittenberge/c275l7865",
       "source": "Kleinanzeigen",
-      "scraped_at": "2026-09-27T13:36:20.246851"
+      "scraped_at": "2026-09-27T19:36:44.118094"
     },
     {
       "title": "Garagen &amp; Stellplätze in Wittenberge",
       "url": "https://www.kleinanzeigen.de/s-garage-lagerraum/wittenberge/c197l7865",
       "source": "Kleinanzeigen",
-      "scraped_at": "2026-09-27T13:36:20.246866"
+      "scraped_at": "2026-09-27T19:36:44.118108"
     },
     {
       "title": "Gewerbeimmobilien in Wittenberge",
       "url": "https://www.kleinanzeigen.de/s-gewerbeimmobilien/wittenberge/c277l7865",
       "source": "Kleinanzeigen",
-      "scraped_at": "2026-09-27T13:36:20.246879"
+      "scraped_at": "2026-09-27T19:36:44.118122"
     },
     {
       "title": "Grundstücke &amp; Gärten in Wittenberge",
       "url": "https://www.kleinanzeigen.de/s-grundstuecke-garten/wittenberge/c207l7865",
       "source": "Kleinanzeigen",
-      "scraped_at": "2026-09-27T13:36:20.246893"
+      "scraped_at": "2026-09-27T19:36:44.118136"
     },
     {
       "title": "Häuser zum Kauf in Wittenberge",
       "url": "https://www.kleinanzeigen.de/s-haus-kaufen/wittenberge/c208l7865",
       "source": "Kleinanzeigen",
-      "scraped_at": "2026-09-27T13:36:20.246938"
+      "scraped_at": "2026-09-27T19:36:44.118151"
     },
     {
       "title": "Häuser zur Miete in Wittenberge",
       "url": "https://www.kleinanzeigen.de/s-haus-mieten/wittenberge/c205l7865",
       "source": "Kleinanzeigen",
-      "scraped_at": "2026-09-27T13:36:20.246958"
+      "scraped_at": "2026-09-27T19:36:44.118165"
     },
     {
       "title": "Mietwohnungen in Wittenberge",
       "url": "https://www.kleinanzeigen.de/s-wohnung-mieten/wittenberge/c203l7865",
       "source": "Kleinanzeigen",
-      "scraped_at": "2026-09-27T13:36:20.246973"
+      "scraped_at": "2026-09-27T19:36:44.118178"
     },
     {
       "title": "Neubauprojekte in Wittenberge",
       "url": "https://www.kleinanzeigen.de/s-neubauprojekte/wittenberge/c403l7865",
       "source": "Kleinanzeigen",
-      "scraped_at": "2026-09-27T13:36:20.246986"
+      "scraped_at": "2026-09-27T19:36:44.118193"
     },
     {
       "title": "Umzug &amp; Transport in Wittenberge",
       "url": "https://www.kleinanzeigen.de/s-umzug-transport/wittenberge/c238l7865",
       "source": "Kleinanzeigen",
-      "scraped_at": "2026-09-27T13:36:20.247001"
+      "scraped_at": "2026-09-27T19:36:44.118206"
     },
     {
       "title": "Weitere Immobilien in Wittenberge",
       "url": "https://www.kleinanzeigen.de/s-immobilien/sonstiges/wittenberge/c198l7865",
       "source": "Kleinanzeigen",
-      "scraped_at": "2026-09-27T13:36:20.247019"
+      "scraped_at": "2026-09-27T19:36:44.118219"
     },
     {
       "title": "Anzeigen in Wittenberge",
       "url": "https://www.kleinanzeigen.de/s-katalog-orte.html?locationId=7865",
       "source": "Kleinanzeigen",
-      "scraped_at": "2026-09-27T13:36:20.247033"
+      "scraped_at": "2026-09-27T19:36:44.118232"
     },
     {
       "title": "ImmoScout24 Monitor - Wittenberge 19322 Search Active",
       "url": "https://www.immobilienscout24.de/Suche/de/brandenburg/prignitz-kreis/wittenberge/grundstueck-kaufen",
       "source": "ImmoScout24",
-      "scraped_at": "2026-09-27T13:36:20.412838"
+      "scraped_at": "2026-09-27T19:36:44.242179"
     },
     {
       "title": "Grundstück zum Kauf in Deutschland",
       "url": "https://www.immowelt.de/suche/kaufen/grundstueck/deutschland/ad02de1",
       "source": "Immowelt",
-      "scraped_at": "2026-09-27T13:36:21.422243"
+      "scraped_at": "2026-09-27T19:36:45.901455"
     },
     {
       "title": "Grundstück zum Kauf in Brandenburg",
       "url": "https://www.immowelt.de/suche/kaufen/grundstueck/brandenburg/ad04de12",
       "source": "Immowelt",
-      "scraped_at": "2026-09-27T13:36:21.422270"
+      "scraped_at": "2026-09-27T19:36:45.901482"
     },
     {
       "title": "Grundstück zum Kauf im Landkreis Prignitz",
       "url": "https://www.immowelt.de/suche/kaufen/grundstueck/brandenburg/prignitz-12070/ad06de341",
       "source": "Immowelt",
-      "scraped_at": "2026-09-27T13:36:21.422288"
+      "scraped_at": "2026-09-27T19:36:45.901499"
     },
     {
       "title": "Grundstück kaufen in Altmärkische Höhe (39606), Stendal (3 Immobilien)",
       "url": "https://www.immowelt.de/suche/kaufen/grundstueck/sachsen-anhalt/altmarkische-hohe-39606/ad08de10436",
       "source": "Immowelt",
-      "scraped_at": "2026-09-27T13:36:21.422308"
+      "scraped_at": "2026-09-27T19:36:45.901518"
     },
     {
       "title": "Grundstück kaufen in Breese (19322), Prignitz",
       "url": "https://www.immowelt.de/suche/kaufen/grundstueck/brandenburg/breese-19322/ad08de8955",
       "source": "Immowelt",
-      "scraped_at": "2026-09-27T13:36:21.422326"
+      "scraped_at": "2026-09-27T19:36:45.901535"
     },
     {
       "title": "Grundstück kaufen in Cumlosen (19322), Prignitz (2 Immobilien)",
       "url": "https://www.immowelt.de/suche/kaufen/grundstueck/brandenburg/cumlosen-19322/ad08de8959",
       "source": "Immowelt",
-      "scraped_at": "2026-09-27T13:36:21.422344"
+      "scraped_at": "2026-09-27T19:36:45.901552"
     },
     {
       "title": "Grundstück kaufen in Gartow (29471), Lüchow-Dannenberg",
       "url": "https://www.immowelt.de/suche/kaufen/grundstueck/niedersachsen/gartow-29471/ad08de1619",
       "source": "Immowelt",
-      "scraped_at": "2026-09-27T13:36:21.422365"
+      "scraped_at": "2026-09-27T19:36:45.901573"
     },
     {
       "title": "Grundstück kaufen in Groß Pankow (Prignitz) (16928), Prignitz",
       "url": "https://www.immowelt.de/suche/kaufen/grundstueck/brandenburg/gross-pankow-prignitz-16928/ad08de8947",
       "source": "Immowelt",
-      "scraped_at": "2026-09-27T13:36:21.422383"
+      "scraped_at": "2026-09-27T19:36:45.901590"
     },
     {
       "title": "Grundstück kaufen in Karstädt (19357), Prignitz",
       "url": "https://www.immowelt.de/suche/kaufen/grundstueck/brandenburg/karstadt-19357/ad08de8949",
       "source": "Immowelt",
-      "scraped_at": "2026-09-27T13:36:21.422398"
+      "scraped_at": "2026-09-27T19:36:45.901607"
     },
     {
       "title": "Grundstück kaufen in Lanz (19309), Prignitz",
       "url": "https://www.immowelt.de/suche/kaufen/grundstueck/brandenburg/lanz-19309/ad08de8960",
       "source": "Immowelt",
-      "scraped_at": "2026-09-27T13:36:21.422414"
+      "scraped_at": "2026-09-27T19:36:45.901622"
     },
     {
       "title": "Grundstück kaufen in Lenzen (Elbe) (19309), Prignitz (3 Immobilien)",
       "url": "https://www.immowelt.de/suche/kaufen/grundstueck/brandenburg/lenzen-elbe-19309/ad08de8961",
       "source": "Immowelt",
-      "scraped_at": "2026-09-27T13:36:21.422430"
+      "scraped_at": "2026-09-27T19:36:45.901638"
     },
     {
       "title": "Grundstück kaufen in Perleberg (19348), Prignitz (1 Immobilien)",
       "url": "https://www.immowelt.de/suche/kaufen/grundstueck/brandenburg/perleberg-19348/ad08de8950",
       "source": "Immowelt",
-      "scraped_at": "2026-09-27T13:36:21.422445"
+      "scraped_at": "2026-09-27T19:36:45.901654"
     },
     {
       "title": "Grundstück kaufen in Plattenburg (19339), Prignitz (1 Immobilien)",
       "url": "https://www.immowelt.de/suche/kaufen/grundstueck/brandenburg/plattenburg-19339/ad08de8951",
       "source": "Immowelt",
-      "scraped_at": "2026-09-27T13:36:21.422462"
+      "scraped_at": "2026-09-27T19:36:45.901678"
     },
     {
       "title": "Grundstück kaufen in Prezelle (29491), Lüchow-Dannenberg",
       "url": "https://www.immowelt.de/suche/kaufen/grundstueck/niedersachsen/prezelle-29491/ad08de1622",
       "source": "Immowelt",
-      "scraped_at": "2026-09-27T13:36:21.422477"
+      "scraped_at": "2026-09-27T19:36:45.901693"
     },
     {
       "title": "Grundstück kaufen in Rühstädt (19322), Prignitz",
       "url": "https://www.immowelt.de/suche/kaufen/grundstueck/brandenburg/ruhstadt-19322/ad08de8957",
       "source": "Immowelt",
-      "scraped_at": "2026-09-27T13:36:21.422491"
+      "scraped_at": "2026-09-27T19:36:45.901708"
     },
     {
       "title": "Grundstück kaufen in Seehausen (39615), Stendal (6 Immobilien)",
       "url": "https://www.immowelt.de/suche/kaufen/grundstueck/sachsen-anhalt/seehausen-39615/ad08de10438",
       "source": "Immowelt",
-      "scraped_at": "2026-09-27T13:36:21.422506"
+      "scraped_at": "2026-09-27T19:36:45.901723"
     },
     {
       "title": "Grundstück kaufen in Weisen (19322), Prignitz (2 Immobilien)",
       "url": "https://www.immowelt.de/suche/kaufen/grundstueck/brandenburg/weisen-19322/ad08de8958",
       "source": "Immowelt",
-      "scraped_at": "2026-09-27T13:36:21.422521"
+      "scraped_at": "2026-09-27T19:36:45.901755"
     },
     {
       "title": "Grundstück kaufen in Werben (Elbe) (39615), Stendal (1 Immobilien)",
       "url": "https://www.immowelt.de/suche/kaufen/grundstueck/sachsen-anhalt/werben-elbe-39615/ad08de10428",
       "source": "Immowelt",
-      "scraped_at": "2026-09-27T13:36:21.422538"
+      "scraped_at": "2026-09-27T19:36:45.901776"
     },
     {
       "title": "Grundstück kaufen in Wittenberge Schadebeuster",
       "url": "https://www.immowelt.de/suche/kaufen/grundstueck/wittenberge-19322/schadebeuster-19322/nbh2de53554",
       "source": "Immowelt",
-      "scraped_at": "2026-09-27T13:36:21.422553"
+      "scraped_at": "2026-09-27T19:36:45.901793"
     },
     {
       "title": "Grundstück kaufen in Wittenberge Lütjenheide",
       "url": "https://www.immowelt.de/suche/kaufen/grundstueck/wittenberge-19322/lutjenheide-19322/nbh2de53553",
       "source": "Immowelt",
-      "scraped_at": "2026-09-27T13:36:21.422567"
+      "scraped_at": "2026-09-27T19:36:45.901808"
     },
     {
       "title": "Grundstück kaufen in Wittenberge Bentwisch",
       "url": "https://www.immowelt.de/suche/kaufen/grundstueck/wittenberge-19322/bentwisch-19322/nbh2de49926",
       "source": "Immowelt",
-      "scraped_at": "2026-09-27T13:36:21.422581"
+      "scraped_at": "2026-09-27T19:36:45.901823"
     },
     {
       "title": "Grundstück kaufen in Wittenberge Lindenberg",
       "url": "https://www.immowelt.de/suche/kaufen/grundstueck/wittenberge-19322/lindenberg-19322/nbh2de53552",
       "source": "Immowelt",
-      "scraped_at": "2026-09-27T13:36:21.422596"
+      "scraped_at": "2026-09-27T19:36:45.901837"
     }
   ]
 }
