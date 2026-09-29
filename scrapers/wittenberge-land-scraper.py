@@ -685,6 +685,25 @@ def save_notified_data(ad_ids: set, fingerprints: set, slugs: set, new_history_e
     with open(NOTIFIED_FILE, "w", encoding="utf-8") as f:
         json.dump(payload, f, indent=2, ensure_ascii=False)
 
+def load_existing_evaluations() -> dict:
+    """
+    Loads previously evaluated items from RESULTS_FILE.
+    Returns a dict mapping ad_id (str) -> evaluated item dict.
+    """
+    eval_cache = {}
+    if os.path.exists(RESULTS_FILE):
+        try:
+            with open(RESULTS_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                items = data.get("items", [])
+                for it in items:
+                    aid = str(it.get("ad_id") or "")
+                    if aid:
+                        eval_cache[aid] = it
+        except Exception as e:
+            safe_log(f"[DB Cache] Error loading {RESULTS_FILE}: {e}")
+    return eval_cache
+
 def notify_new_matches(matches: list) -> int:
     """
     Sends rich Telegram alert to Iurii for new matching properties.
@@ -1174,17 +1193,97 @@ def run():
     step1_candidates = [it for it in all_raw if python_pre_filter(it)]
     safe_log(f"[Step 1: Python Filter] Kept {len(step1_candidates)} high-probability candidates (eliminated wanted ads, leases, junk).")
 
-    # 3. Step 2: Groq AI Evidence Evaluator with Percentage Scoring
-    evaluated_items = groq_evaluate_listings(step1_candidates)
+    # 3. Step 1.5: Pre-Groq Database & Notified Cache Check
+    # Avoid unnecessary Groq API calls by reusing existing evaluations or skipping already-notified ads.
+    notified_ids, notified_fps, notified_slugs, _ = load_notified_data()
+    eval_cache = load_existing_evaluations()
 
-    # 4. Telegram Notification for High Matches (Score >= 70%)
-    matches = [it for it in evaluated_items if it.get("verdict") == "MATCH"]
-    safe_log(f"[Step 2: Groq AI] {len(matches)} listings passed strict ≥{MATCH_THRESHOLD}% criteria.")
+    already_evaluated_items = []
+    new_candidates_for_groq = []
+
+    for it in step1_candidates:
+        aid = str(it.get("ad_id") or "")
+        fp = get_property_fingerprint(it)
+        slug = get_property_slug(it)
+
+        # Check if already notified to Iurii
+        is_already_sent = (
+            aid in notified_ids or
+            (fp and fp in notified_fps) or
+            (slug and slug in notified_slugs)
+        )
+
+        # Check if already evaluated in results.json
+        cached_eval = eval_cache.get(aid)
+        if not cached_eval and slug:
+            for prev in eval_cache.values():
+                if get_property_slug(prev) == slug:
+                    cached_eval = prev
+                    break
+        if not cached_eval and fp:
+            for prev in eval_cache.values():
+                if get_property_fingerprint(prev) == fp:
+                    cached_eval = prev
+                    break
+
+        if cached_eval and cached_eval.get("verdict") == "REJECTED":
+            safe_log(f"[DB Cache] Ad #{aid} ('{it.get('title', '')[:35]}...') already evaluated in database (REJECTED: {cached_eval.get('rejection_reason', 'Not fitting')}). Skipping Groq audit.")
+            it.update({
+                "score": cached_eval.get("score", 0),
+                "verdict": "REJECTED",
+                "summary_ru": cached_eval.get("summary_ru", ""),
+                "rejection_reason": cached_eval.get("rejection_reason"),
+                "evidence": cached_eval.get("evidence", {}),
+                "evaluator_model": f"{cached_eval.get('evaluator_model', 'groq')} (db_cached)"
+            })
+            already_evaluated_items.append(it)
+        elif is_already_sent or (cached_eval and cached_eval.get("verdict") == "MATCH"):
+            safe_log(f"[DB Cache] Ad #{aid} ('{it.get('title', '')[:35]}...') previously verified match ({cached_eval.get('score', 85) if cached_eval else 85}%). Skipping Groq audit.")
+            if cached_eval:
+                it.update({
+                    "score": cached_eval.get("score", 85),
+                    "verdict": "MATCH",
+                    "summary_ru": cached_eval.get("summary_ru", "Ранее проверено и отправлено клиенту."),
+                    "rejection_reason": None,
+                    "evidence": cached_eval.get("evidence", {}),
+                    "evaluator_model": f"{cached_eval.get('evaluator_model', 'groq')} (db_cached)"
+                })
+            else:
+                it.update({
+                    "score": 85,
+                    "verdict": "MATCH",
+                    "summary_ru": "Ранее проверено и отправлено клиенту.",
+                    "rejection_reason": None,
+                    "evidence": {
+                        "offer_type_quote": "Ранее подтверждено",
+                        "property_type_quote": "Grundstück",
+                        "location_quote": it.get("location", ""),
+                        "size_quote": it.get("size_str", "")
+                    },
+                    "evaluator_model": "db_cached"
+                })
+            already_evaluated_items.append(it)
+        else:
+            new_candidates_for_groq.append(it)
+
+    # 4. Step 2: Groq AI Evidence Evaluator with Percentage Scoring (ONLY for genuinely new candidates)
+    if new_candidates_for_groq:
+        safe_log(f"[Step 2: Groq AI] Auditing {len(new_candidates_for_groq)} genuinely NEW listings with Groq AI...")
+        newly_evaluated = groq_evaluate_listings(new_candidates_for_groq)
+    else:
+        safe_log("[Step 2: Groq AI] 0 new listings to audit. All candidates already exist in database/cache. Skipping Groq API calls completely!")
+        newly_evaluated = []
+
+    all_evaluated = already_evaluated_items + newly_evaluated
+
+    # 5. Telegram Notification for High Matches (Score >= 70%)
+    matches = [it for it in all_evaluated if it.get("verdict") == "MATCH"]
+    safe_log(f"[Evaluation Summary] {len(matches)} listings passed strict ≥{MATCH_THRESHOLD}% criteria ({len(already_evaluated_items)} reused from DB cache, {len(newly_evaluated)} new from Groq).")
     new_alerts = notify_new_matches(matches)
     safe_log(f"[Telegram] Dispatched {new_alerts} new alert notifications to {CLIENT_NAME}.")
 
-    # 5. Live Dashboard & History Generation
-    generate_dashboards(evaluated_items, new_alerts)
+    # 6. Live Dashboard & History Generation
+    generate_dashboards(all_evaluated, new_alerts)
     safe_log("=== Scraper & Evaluation Cycle Completed Successfully ===")
 
 if __name__ == "__main__":

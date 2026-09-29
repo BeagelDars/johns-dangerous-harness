@@ -1,5 +1,173 @@
 [
   {
+    "timestamp": "2026-09-29 20:57:36 UTC",
+    "total_scanned": 7,
+    "matches_found": 2,
+    "telegram_alerts_sent": 0
+  },
+  {
+    "timestamp": "2026-09-29 20:57:11 UTC",
+    "total_scanned": 7,
+    "matches_found": 2,
+    "telegram_alerts_sent": 0
+  },
+  {
+    "timestamp": "2026-09-29 18:53:13 UTC",
+    "total_scanned": 7,
+    "matches_found": 2,
+    "telegram_alerts_sent": 0
+  },
+  {
+    "timestamp": "2026-09-29 20:52:21 UTC",
+    "total_scanned": 7,
+    "matches_found": 2,
+    "telegram_alerts_sent": 0
+  },
+  {
+    "timestamp": "2026-09-29 18:43:16 UTC",
+    "total_scanned": 9,
+    "matches_found": 3,
+    "telegram_alerts_sent": 0
+  },
+  {
+    "timestamp": "2026-09-29 20:41:22 UTC",
+    "total_scanned": 9,
+    "matches_found": 6,
+    "telegram_alerts_sent": 1
+  },
+  {
+    "timestamp": "2026-09-29 17:50:47 UTC",
+    "total_scanned": 16,
+    "matches_found": 10,
+    "telegram_alerts_sent": 0
+  },
+  {
+    "timestamp": "2026-09-29 10:29:34 UTC",
+    "total_scanned": 16,
+    "matches_found": 6,
+    "telegram_alerts_sent": 0
+  },
+  {
+    "timestamp": "2026-09-29 00:16:05 UTC",
+    "total_scanned": 14,
+    "matches_found": 5,
+    "telegram_alerts_sent": 0
+  },
+  {
+    "timestamp": "2026-09-28 16:33:58 UTC",
+    "total_scanned": 14,
+    "matches_found": 6,
+    "telegram_alerts_sent": 2
+  },
+  {
+    "timestamp": "2026-09-28 04:20:45 UTC",
+    "total_scanned": 14,
+    "matches_found": 4,
+    "telegram_alerts_sent": 0
+  },
+  {
+    "timestamp": "2026-09-27 22:52:52 UTC",
+    "total_scanned": 14,
+    "matches_found": 3,
+    "telegram_alerts_sent": 0
+  },
+  {
+    "timestamp": "2026-09-27 19:38:01 UTC",
+    "total_scanned": 14,
+    "matches_found": 3,
+    "telegram_alerts_sent": 1
+  },
+  {
+    "timestamp": "2026-09-27 13:38:02 UTC",
+    "total_scanned": 14,
+    "matches_found": 7,
+    "telegram_alerts_sent": 0
+  },
+  {
+    "timestamp": "2026-09-27 04:19:38 UTC",
+    "total_scanned": 13,
+    "matches_found": 8,
+    "telegram_alerts_sent": 0
+  },
+  {
+    "timestamp": "2026-09-26 22:29:33 UTC",
+    "total_scanned": 13,
+    "matches_found": 7,
+    "telegram_alerts_sent": 0
+  },
+  {
+    "timestamp": "2026-09-26 19:06:52 UTC",
+    "total_scanned": 13,
+    "matches_found": 6,
+    "telegram_alerts_sent": 1
+  },
+  {
+    "timestamp": "2026-09-26 12:46:15 UTC",
+    "total_scanned": 15,
+    "matches_found": 6,
+    "telegram_alerts_sent": 0
+  },
+  {
+    "timestamp": "2026-09-26 04:06:00 UTC",
+    "total_scanned": 15,
+    "matches_found": 6,
+    "telegram_alerts_sent": 0
+  },
+  {
+    "timestamp": "2026-09-25 23:10:24 UTC",
+    "total_scanned": 15,
+    "matches_found": 6,
+    "telegram_alerts_sent": 2
+  },
+  {
+    "timestamp": "2026-09-25 16:49:12 UTC",
+    "total_scanned": 15,
+    "matches_found": 7,
+    "telegram_alerts_sent": 0
+  },
+  {
+    "timestamp": "2026-09-25 09:33:33 UTC",
+    "total_scanned": 12,
+    "matches_found": 8,
+    "telegram_alerts_sent": 0
+  },
+  {
+    "timestamp": "2026-09-25 04:00:59 UTC",
+    "total_scanned": 13,
+    "matches_found": 6,
+    "telegram_alerts_sent": 0
+  },
+  {
+    "timestamp": "2026-09-24 21:30:16 UTC",
+    "total_scanned": 13,
+    "matches_found": 7,
+    "telegram_alerts_sent": 0
+  },
+  {
+    "timestamp": "2026-09-24 23:28:40 UTC",
+    "total_scanned": 13,
+    "matches_found": 5,
+    "telegram_alerts_sent": 0
+  },
+  {
+    "timestamp": "2026-09-24 21:24:58 UTC",
+    "total_scanned": 16,
+    "matches_found": 7,
+    "telegram_alerts_sent": 0
+  },
+  {
+    "timestamp": "2026-09-24 23:23:20 UTC",
+    "total_scanned": 16,
+    "matches_found": 12,
+    "telegram_alerts_sent": 3
+  },
+  {
+    "timestamp": "2026-09-24 21:16:15 UTC",
+    "total_scanned": 23,
+    "matches_found": 2,
+    "telegram_alerts_sent": 1
+  },
+  {
     "timestamp": "2026-09-24 23:14:04 UTC",
     "total_scanned": 23,
     "matches_found": 3,
