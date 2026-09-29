@@ -1,5 +1,5 @@
 {
-  "last_updated": "2026-09-29T20:57:36.524333",
+  "last_updated": "2026-09-29T18:58:47.623220",
   "client": "Iurii",
   "criteria": "Wittenberge 19322 (+30km, closer is better), Dorf/Grundstück, 1.000 - 5.000 m², Offer for Sale, Max 50.000 €",
   "total_scanned": 7,
@@ -16,7 +16,7 @@
       "size_str": "",
       "image_url": "https://img.kleinanzeigen.de/api/v1/prod-ads/images/c2/c2b52816-e9cd-49a5-b2ce-953d8f3f3e73?rule=$_59.AUTO",
       "url": "https://www.kleinanzeigen.de/s-anzeige/schoenes-baugrundstueck-mit-weitblick-in-ruhiger-idyllischer-dorflage-von-gross-leppin/3504544756-207-25791",
-      "scraped_at": "2026-09-29T20:57:32.628123",
+      "scraped_at": "2026-09-29T18:58:46.283501",
       "score": 85,
       "verdict": "MATCH",
       "summary_ru": "Отличный вариант: участок в Groß Leppin (0 км от Виттенберге) за 39.900 €, площадь ~5.400 м² (чуть выше лимита, но цена и локация идеальны).",
@@ -27,7 +27,7 @@
         "location_quote": "19339 Plattenburg Wittenberge (0 km)",
         "size_quote": "Straßenfront von ca. 36 Metern und eine Länge von 150 bzw. 135 m"
       },
-      "evaluator_model": "qwen/qwen3.8-27b (db_cached) (db_cached)"
+      "evaluator_model": "qwen/qwen3.8-27b (db_cached) (db_cached) (db_cached)"
     },
     {
       "ad_id": "3066367427",
@@ -39,7 +39,7 @@
       "size_str": "",
       "image_url": "https://img.kleinanzeigen.de/api/v1/prod-ads/images/38/385d45dd-9e47-4224-919d-323afbb193cf?rule=$_59.AUTO",
       "url": "https://www.kleinanzeigen.de/s-anzeige/bauland-baugrundstueck-mit-attraktivem-weitblick-am-ortsrand/3066367427-207-21109",
-      "scraped_at": "2026-09-29T20:57:32.628123",
+      "scraped_at": "2026-09-29T18:58:46.283801",
       "score": 0,
       "verdict": "REJECTED",
       "summary_ru": "Отклонено: локация Stechow-Ferchesar (14715) находится за пределами 30 км от Виттенберге.",
@@ -50,7 +50,7 @@
         "location_quote": "14715 Stechow-Ferchesar ca. 30 km",
         "size_quote": null
       },
-      "evaluator_model": "qwen/qwen3.8-27b (db_cached) (db_cached)"
+      "evaluator_model": "qwen/qwen3.8-27b (db_cached) (db_cached) (db_cached)"
     },
     {
       "ad_id": "3496665323",
@@ -62,7 +62,7 @@
       "size_str": "1.777 m²",
       "image_url": "https://img.kleinanzeigen.de/api/v1/prod-ads/images/f2/f275d7c7-98f1-4e39-878f-b84c51f865ea?rule=$_59.AUTO",
       "url": "https://www.kleinanzeigen.de/s-anzeige/grosszuegiges-grundstueck-mit-potenzial-1-777-m-fuer-ihre-ideen/3496665323-207-29342",
-      "scraped_at": "2026-09-29T20:57:32.628123",
+      "scraped_at": "2026-09-29T18:58:46.284269",
       "score": 100,
       "verdict": "MATCH",
       "summary_ru": "Идеальное соответствие: участок 1.777 м² в Lübzow (0 км) за 49.000 €.",
@@ -73,7 +73,7 @@
         "location_quote": "19348 Lübzow Wittenberge (0 km)",
         "size_quote": "Grundstücksgröße: 1.777 m²"
       },
-      "evaluator_model": "qwen/qwen3.8-27b (db_cached) (db_cached)"
+      "evaluator_model": "qwen/qwen3.8-27b (db_cached) (db_cached) (db_cached)"
     },
     {
       "ad_id": "3523753795",
@@ -85,7 +85,7 @@
       "size_str": "1.245 m²",
       "image_url": "https://img.kleinanzeigen.de/api/v1/prod-ads/images/e3/e307a78a-c0c6-4516-9fb4-533e49d6de9d?rule=$_59.AUTO",
       "url": "https://www.kleinanzeigen.de/s-anzeige/unbebautes-grundstueck-ihre-immobiliengelegenheit-provisionsfrei/3523753795-207-20113",
-      "scraped_at": "2026-09-29T20:57:32.628123",
+      "scraped_at": "2026-09-29T18:58:46.284555",
       "score": 0,
       "verdict": "REJECTED",
       "summary_ru": "Отклонено: Seehausen (39615) находится значительно дальше 30 км от Виттенберге.",
@@ -96,7 +96,7 @@
         "location_quote": "39615 Hansestadt Seehausen Wittenberge (0 km)",
         "size_quote": "Fläche von 1.245 m²"
       },
-      "evaluator_model": "qwen/qwen3.8-27b (db_cached) (db_cached)"
+      "evaluator_model": "qwen/qwen3.8-27b (db_cached) (db_cached) (db_cached)"
     },
     {
       "ad_id": "3523749206",
@@ -108,7 +108,7 @@
       "size_str": "",
       "image_url": "https://img.kleinanzeigen.de/api/v1/prod-ads/images/9a/9a07f53f-1bbf-4948-acce-cb3a9e1cb869?rule=$_59.AUTO",
       "url": "https://www.kleinanzeigen.de/s-anzeige/land-und-forstgrundstueck-immobilienchance-fuer-kaeufer-ohne-provision/3523749206-207-7872",
-      "scraped_at": "2026-09-29T20:57:32.628123",
+      "scraped_at": "2026-09-29T18:58:46.284632",
       "score": 0,
       "verdict": "REJECTED",
       "summary_ru": "Отклонено: участок лесного/сельскохозяйственного назначения, что не соответствует критерию 'строительный участок' (Baugrundstück).",
@@ -119,7 +119,7 @@
         "location_quote": "19322 Wittenberge",
         "size_quote": null
       },
-      "evaluator_model": "qwen/qwen3.8-27b (db_cached) (db_cached)"
+      "evaluator_model": "qwen/qwen3.8-27b (db_cached) (db_cached) (db_cached)"
     },
     {
       "ad_id": "2358043902",
@@ -131,7 +131,7 @@
       "size_str": "",
       "image_url": "https://img.kleinanzeigen.de/api/v1/prod-ads/images/6b/6bdb2e22-bce1-4018-9044-7fe2b885d580?rule=$_59.AUTO",
       "url": "https://www.kleinanzeigen.de/s-anzeige/idyllisches-baugrundstueck-fuer-ihren-haustraum/2358043902-207-17235",
-      "scraped_at": "2026-09-29T20:57:32.628123",
+      "scraped_at": "2026-09-29T18:58:46.284702",
       "score": 0,
       "verdict": "REJECTED",
       "summary_ru": "Отклонено: локация Osterburg (39606) находится за пределами 30 км от Wittenberge (расстояние ~45-50 км).",
@@ -142,7 +142,7 @@
         "location_quote": "39606 Osterburg",
         "size_quote": null
       },
-      "evaluator_model": "qwen/qwen3.8-27b (db_cached) (db_cached)"
+      "evaluator_model": "qwen/qwen3.8-27b (db_cached) (db_cached) (db_cached)"
     },
     {
       "ad_id": "3419348192",
@@ -154,7 +154,7 @@
       "size_str": "",
       "image_url": "https://img.kleinanzeigen.de/api/v1/prod-ads/images/70/703aab22-7a32-4b2f-8d1a-dd38f844e160?rule=$_59.AUTO",
       "url": "https://www.kleinanzeigen.de/s-anzeige/grundstueck-in-39606-osterburg-provisionsfrei-schnell-sein-/3419348192-207-17235",
-      "scraped_at": "2026-09-29T20:57:32.628123",
+      "scraped_at": "2026-09-29T18:58:46.284918",
       "score": 0,
       "verdict": "REJECTED",
       "summary_ru": "Отклонено: локация Osterburg (39606) находится за пределами 30 км от Wittenberge (расстояние ~45-50 км).",
@@ -165,7 +165,7 @@
         "location_quote": "39606 Osterburg",
         "size_quote": null
       },
-      "evaluator_model": "qwen/qwen3.8-27b (db_cached) (db_cached)"
+      "evaluator_model": "qwen/qwen3.8-27b (db_cached) (db_cached) (db_cached)"
     }
   ]
 }

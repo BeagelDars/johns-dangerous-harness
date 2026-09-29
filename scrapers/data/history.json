@@ -1,5 +1,11 @@
 [
   {
+    "timestamp": "2026-09-29 18:58:47 UTC",
+    "total_scanned": 7,
+    "matches_found": 2,
+    "telegram_alerts_sent": 0
+  },
+  {
     "timestamp": "2026-09-29 20:57:36 UTC",
     "total_scanned": 7,
     "matches_found": 2,

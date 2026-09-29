@@ -13,7 +13,7 @@
 | Status Indicator | Metric | Value |
 | :--- | :--- | :--- |
 | 🟢 **Heartbeat** | Runner Schedule | Every 4 hours (`0 */4 * * *`) via GitHub Actions |
-| ⏱️ **Last Cycle** | Executed at | `2026-09-29 20:57:36 UTC` |
+| ⏱️ **Last Cycle** | Executed at | `2026-09-29 18:58:47 UTC` |
 | 🎯 **Target Region** | Search Area | **Wittenberge (19322) + 30 km radius** (Closer to Wittenberge prioritized) |
 | 📐 **Target Area** | Plot Size | **1,000 – 5,000 m²** (Strict Knockout) |
 | 💰 **Max Budget** | Price Limit | **≤ 50,000 €** (Strict Knockout) |
