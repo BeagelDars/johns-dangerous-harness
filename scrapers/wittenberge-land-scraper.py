@@ -326,10 +326,14 @@ def python_pre_filter(item: dict) -> bool:
         except Exception:
             pass
 
-    # Reject known distant towns beyond 30 km radius
-    far_towns = ["wittstock", "dranse", "neuruppin", "rathenow", "stendal", "tangermünde", "salzwedel"]
+    # Reject known distant towns beyond 30 km radius (Kyritz ~44km, Gumtow ~33km, Wittstock ~52km)
+    # Note: Pritzwalk is specifically retained per client request.
+    far_towns = [
+        "kyritz", "gumtow", "dannenwalde", "16866", "wittstock", "dranse",
+        "neuruppin", "rathenow", "stendal", "tangermünde", "salzwedel"
+    ]
     if any(ft in loc_lower for ft in far_towns):
-        safe_log(f"[Filter Knockout] ad #{item.get('ad_id')} rejected: Far town outside 30 km radius.")
+        safe_log(f"[Filter Knockout] ad #{item.get('ad_id')} rejected: Far town/region ({item.get('location')}) excluded by client.")
         return False
 
     # 6. Reject pure forest / auction timber items (client specifically wants village/building plots)
@@ -393,14 +397,14 @@ def groq_evaluate_listings(candidates: list) -> list:
 CLIENT CRITERIA (from Iurii - STRICT KNOCKOUT RULES):
 1. Maximum Budget: <= 50,000 € (Цена до 50000 евро).
 2. Size Range: 1,000 to 5,000 m² (От 1000 до 5000 кв. метров).
-3. Location: Wittenberge (19322) + 30 km radius (До 30 км). Distance rule: THE CLOSER TO WITTENBERGE, THE BETTER! (0-10 km is ideal, 28-30 km is considered far and unfavorable).
+3. Location: Wittenberge (19322) + 30 km radius (До 30 км). EXCLUDED TOWNS: Kyritz (~44km), Gumtow (~33km), Dannenwalde, Wittstock, Neuruppin, Dranse, Stendal. Pritzwalk (~33km) is specifically retained by client request.
 4. Offer for Sale: MUST be a real sale offer (Kauf / Verkauf). REJECT wanted ads ("Gesuch", "Suche") and leases/rentals ("Pacht", "Miete").
 5. Property Type: Land/plot for building or village living (Grundstück, Baugrundstück, Bauland, ländlich/Dorf).
 
 HARD KNOCKOUT RULES (Score = 0% and verdict = "REJECT" INSTANTLY if ANY condition fails):
 - KNOCKOUT 1 (Price > 50,000 €): If explicit price is > 50,000 € (e.g. 55k, 60k, 65k, 150k) -> match_percentage = 0, verdict = "REJECT", rejection_reason = "Цена превышает лимит 50.000 €".
 - KNOCKOUT 2 (Size out of bounds): If size is explicitly stated and < 1,000 m² or > 5,000 m² -> match_percentage = 0, verdict = "REJECT", rejection_reason = "Площадь вне диапазона 1.000 - 5.000 м²".
-- KNOCKOUT 3 (Distance > 30 km): If location is > 30 km from Wittenberge (e.g. Wittstock, Neuruppin, Dranse, Stendal) -> match_percentage = 0, verdict = "REJECT", rejection_reason = "Расстояние превышает 30 км от Виттенберге".
+- KNOCKOUT 3 (Distance > 30 km / Excluded Towns): If location is in an excluded town (Kyritz, Gumtow, Dannenwalde, Wittstock, Neuruppin, Dranse, Stendal) or >30 km away -> match_percentage = 0, verdict = "REJECT", rejection_reason = "Локация исключена клиентом как слишком удаленная". Note: Pritzwalk is allowed.
 - KNOCKOUT 4 (Wanted / Lease): If wanted ad ("Gesuch", "Suche") or lease/rental ("Pacht", "Miete", "verpachten") -> match_percentage = 0, verdict = "REJECT", rejection_reason = "Не является предложением продажи (Gesuch/Pacht)".
 - KNOCKOUT 5 (Not a Plot): If apartment, pure house without plot, machinery, timber forest -> match_percentage = 0, verdict = "REJECT", rejection_reason = "Не является земельным участком".
 
@@ -410,8 +414,8 @@ SCORING (0 to 100% total - only if ALL knockouts pass):
 3. Proximity to Wittenberge (25 pts) - CLOSER IS BETTER:
    - 0 to 10 km (Wittenberge 0km, Breese, Weisen, Cumlosen, Perleberg): Ideal, top priority! +25 pts.
    - 11 to 20 km (Lenzen, Karstädt, Bad Wilsnack, Seehausen): Good! +18 pts.
-   - 21 to 27 km (Osterburg, Havelberg): Acceptable distance: +10 pts.
-   - 28 to 30 km (Kyritz, Pritzwalk): Far border distance! Client specifically notes ~29 km is far and suboptimal: +4 pts.
+   - 21 to 27 km (Osterburg, Havelberg): Acceptable distance: +12 pts.
+   - Pritzwalk: Allowed border location (client specifically allows): +6 pts.
 4. Property & Sale Offer (25 pts): Verified offer to sell plot/building land: +25 pts.
 
 VERBATIM QUOTE REQUIREMENT (Zero Hallucination):
@@ -511,6 +515,13 @@ Return JSON:
                                             ev_record["rejection_reason"] = f"Расстояние {dist_m.group(1)} км превышает {MAX_RADIUS_KM} км"
                                     except Exception:
                                         pass
+
+                                # Check excluded towns in post-evaluator (Kyritz, Gumtow, Wittstock)
+                                for ft in ["kyritz", "gumtow", "dannenwalde", "16866", "wittstock", "dranse", "neuruppin", "rathenow", "stendal"]:
+                                    if ft in loc_str or ft in c_text:
+                                        score = 0
+                                        ev_record["rejection_reason"] = f"Локация {ft.capitalize()} исключена клиентом как слишком удаленная"
+                                        break
 
                                 # Check explicit size in post-evaluator
                                 full_c_text = f"{c.get('size_str', '')} {c_text}"
