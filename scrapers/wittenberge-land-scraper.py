@@ -96,6 +96,10 @@ README_FILE = os.path.join(BASE_DIR, "README.md")
 DASHBOARD_FILE = os.path.join(BASE_DIR, "dashboard.html")
 
 MATCH_THRESHOLD = 70  # Only send items scoring >= 70%
+MAX_PRICE_EUR = 50000  # Strict knockout: Max 50,000 €
+MIN_SIZE_SQM = 1000    # Strict knockout: Min 1,000 m²
+MAX_SIZE_SQM = 5000    # Strict knockout: Max 5,000 m²
+MAX_RADIUS_KM = 30     # Strict knockout: Max 30 km from Wittenberge
 
 def safe_log(msg: str):
     """Prints message safely handling unicode encoding."""
@@ -226,7 +230,7 @@ def parse_html_listings(html: str) -> list:
         specs = specs_m.group(1).strip() if specs_m else ""
 
         # Extract square meters from specs or title/description
-        sqm_match = re.search(r'(\d+(?:[\.,]\d+)?(?:\.\d+)?)\s*(?:m²|qm|m2|ha|hektar)', f"{title} {specs} {description}", re.IGNORECASE)
+        sqm_match = re.search(r'(\d+(?:[\.,]\d+)?(?:\.\d+)?)\s*(?:m²|qm|m2|\bha\b|\bhektar\b)', f"{title} {specs} {description}", re.IGNORECASE)
         size_str = sqm_match.group(0) if sqm_match else ""
 
         listings.append({
@@ -248,13 +252,21 @@ def parse_html_listings(html: str) -> list:
 # Step 1: Fast Deterministic Python Pre-Filter
 # ==============================================================================
 def python_pre_filter(item: dict) -> bool:
-    """Strict initial filter to eliminate wanted ads, leases, pure forest, and out-of-bound sizes."""
+    """
+    Deterministic knockout filter: Drops any listing that violates Iurii's strict criteria:
+    - Price must be <= 50.000 €
+    - Size must be within 1.000 - 5.000 m² (if specified)
+    - Distance must be <= 30 km from Wittenberge
+    - Must be an offer for sale (no Gesuche, no Pacht/Miete)
+    """
     title_lower = (item.get("title") or "").lower()
     desc_lower = (item.get("description") or "").lower()
     specs_lower = (item.get("specs") or "").lower()
-    full_text = f"{title_lower} {specs_lower} {desc_lower}"
+    loc_lower = (item.get("location") or "").lower()
+    price_str = item.get("price") or ""
+    full_text = f"{title_lower} {specs_lower} {desc_lower} {loc_lower}"
 
-    # 1. Reject Wanted Ads (Gesuche / Suche / Kaufgesuch)
+    # 1. Knockout: Reject Wanted Ads (Gesuche / Suche / Kaufgesuch)
     if "gesuch" in specs_lower:
         return False
     wanted_kw = [
@@ -264,45 +276,77 @@ def python_pre_filter(item: dict) -> bool:
     if any(k in title_lower for k in wanted_kw) or "zum kauf gesucht" in full_text:
         return False
 
-    # 2. Reject Leases / Rentals (Pacht / Miete)
+    # 2. Knockout: Reject Leases / Rentals (Pacht / Miete)
     lease_kw = ["pacht", "verpachten", "zu verpachten", "pachtland", "miete", "zu vermieten", "mietwohnung"]
     if any(k in title_lower for k in lease_kw) or "zur pacht" in full_text:
         return False
 
-    # 3. Reject Junk (tools, mowers, furniture, caravans)
+    # 3. Knockout: Reject Price > 50,000 € (Лимит: до 50000 евро)
+    # Extracts numeric price e.g. "61.500 € VB", "60.000 €", "150.000 €"
+    price_m = re.search(r'(\d+(?:\.\d+)?)\s*(?:€|euro)', price_str, re.IGNORECASE)
+    if price_m:
+        try:
+            val = float(price_m.group(1).replace(".", ""))
+            if val > MAX_PRICE_EUR:
+                safe_log(f"[Filter Knockout] ad #{item.get('ad_id')} rejected: Price {val:.0f} € > {MAX_PRICE_EUR} €.")
+                return False
+        except Exception:
+            pass
+
+    # 4. Knockout: Reject Explicit Size outside 1,000 - 5,000 m² (От 1000 до 5000 кв. м)
+    ha_match = re.search(r'(\d+(?:[,\.]\d+)?)\s*\b(?:ha|hektar)\b', full_text, re.IGNORECASE)
+    if ha_match:
+        try:
+            ha_val = float(ha_match.group(1).replace(",", "."))
+            # 0.1 ha = 1,000 m², 0.5 ha = 5,000 m²
+            if ha_val < 0.1 or ha_val > 0.5:
+                safe_log(f"[Filter Knockout] ad #{item.get('ad_id')} rejected: Size {ha_val} ha ({ha_val*10000:.0f} m²) outside [1000, 5000].")
+                return False
+        except Exception:
+            pass
+
+    sqm_match = re.search(r'(\d+(?:[\.,]\d+)?)\s*(?:m²|qm|m2)', full_text)
+    if sqm_match:
+        try:
+            sqm_val = float(sqm_match.group(1).replace(".", "").replace(",", "."))
+            if sqm_val < MIN_SIZE_SQM or sqm_val > MAX_SIZE_SQM:
+                safe_log(f"[Filter Knockout] ad #{item.get('ad_id')} rejected: Size {sqm_val:.0f} m² outside [{MIN_SIZE_SQM}, {MAX_SIZE_SQM}].")
+                return False
+        except Exception:
+            pass
+
+    # 5. Knockout: Reject Distance > 30 km (До 30 км от Виттенберге)
+    dist_m = re.search(r'(?:ca\.\s*)?(\d+)\s*km', loc_lower)
+    if dist_m:
+        try:
+            d = int(dist_m.group(1))
+            if d > MAX_RADIUS_KM:
+                safe_log(f"[Filter Knockout] ad #{item.get('ad_id')} rejected: Distance {d} km > {MAX_RADIUS_KM} km.")
+                return False
+        except Exception:
+            pass
+
+    # Reject known distant towns beyond 30 km radius
+    far_towns = ["wittstock", "dranse", "neuruppin", "rathenow", "stendal", "tangermünde", "salzwedel"]
+    if any(ft in loc_lower for ft in far_towns):
+        safe_log(f"[Filter Knockout] ad #{item.get('ad_id')} rejected: Far town outside 30 km radius.")
+        return False
+
+    # 6. Reject pure forest / auction timber items (client specifically wants village/building plots)
+    if "auktion - wald" in title_lower or "waldfläche" in title_lower or "waldgrundstück" in title_lower:
+        return False
+
+    # 7. Reject Junk (tools, mowers, furniture, caravans)
     junk_kw = ["rasenmäher", "gartenmöbel", "pflanzen", "zaun", "brennholz", "traktor", "sofa", "wohnwagen", "wohnmobil"]
     if any(k in title_lower for k in junk_kw):
         return False
 
-    # 4. Reject pure forest / auction timber items (client specifically wants village/building plots)
-    if "auktion - wald" in title_lower or "waldfläche" in title_lower or "waldgrundstück" in title_lower:
-        return False
-
-    # 5. Reject obvious huge agricultural acreage (>1.2 ha = 12,000 m²) or tiny garden shed (<400 m²)
-    ha_match = re.search(r'(\d+(?:[,\.]\d+)?)\s*(?:ha|hektar)', full_text)
-    if ha_match:
-        try:
-            val = float(ha_match.group(1).replace(",", "."))
-            if val > 1.2:
-                return False
-        except Exception:
-            pass
-
-    sqm_match = re.search(r'(\d+(?:[,\.]\d+)?)\s*(?:m²|qm|m2)', full_text)
-    if sqm_match:
-        try:
-            val = float(sqm_match.group(1).replace(".", "").replace(",", "."))
-            if val < 400 or val > 15000:
-                return False
-        except Exception:
-            pass
-
-    # 6. Check for positive plot / land indications
+    # 8. Check for positive plot / land indications
     land_kw = ["grundstück", "grundstueck", "baugrundstück", "acker", "ackerland", "wiese", "gartenland", "fläche", "bauland", "parzelle", "neubaufläche"]
     if not any(k in full_text for k in land_kw):
         return False
 
-    # 7. Must have valid URL
+    # 9. Must have valid URL
     if not item.get("url") or "/s-anzeige/" not in item["url"]:
         return False
 
@@ -325,7 +369,7 @@ def groq_evaluate_listings(candidates: list) -> list:
 
     safe_log(f"[Groq AI] Auditing {len(candidates)} pre-filtered listings with zero-hallucination percentage scoring...")
 
-    models = ["openai/gpt-oss-120b", "qwen/qwen3.8-27b", "openai/gpt-oss-20b"]
+    models = ["qwen/qwen3.8-27b", "openai/gpt-oss-120b", "openai/gpt-oss-20b"]
     chunk_size = 4
     evaluated_results = []
 
@@ -346,17 +390,29 @@ def groq_evaluate_listings(candidates: list) -> list:
 
         prompt = f"""You are a strict, zero-hallucination real estate auditor AI evaluating property listings against client Iurii's exact search requirements.
 
-CLIENT REQUIREMENTS (from Iurii):
-1. Offer for Sale: MUST be a real offer to sell real estate. REJECT wanted ads ("Gesuch", "Suche", "zum Kauf gesucht") and leases ("Pacht", "Miete", "verpachten").
-2. Property Type: Land/plot for building or village living (Grundstück, Baugrundstück, Bauland, ländlich/Dorf).
-3. Location: Wittenberge (19322) or surrounding villages/towns within 30 km radius (Prignitz/Altmark).
-4. Area/Size: Between 1,000 m² and 5,000 m².
+CLIENT CRITERIA (from Iurii - STRICT KNOCKOUT RULES):
+1. Maximum Budget: <= 50,000 € (Цена до 50000 евро).
+2. Size Range: 1,000 to 5,000 m² (От 1000 до 5000 кв. метров).
+3. Location: Wittenberge (19322) + 30 km radius (До 30 км). Distance rule: THE CLOSER TO WITTENBERGE, THE BETTER! (0-10 km is ideal, 28-30 km is considered far and unfavorable).
+4. Offer for Sale: MUST be a real sale offer (Kauf / Verkauf). REJECT wanted ads ("Gesuch", "Suche") and leases/rentals ("Pacht", "Miete").
+5. Property Type: Land/plot for building or village living (Grundstück, Baugrundstück, Bauland, ländlich/Dorf).
 
-SCORING RULES (0 to 100% total):
-- Point 1 (Sale vs Wanted/Lease, 35% weight): If wanted ad or lease, match_percentage = 0% and verdict = "REJECT". If verified offer for sale: +35%.
-- Point 2 (Property Type, 25% weight): If verified plot/building land: +25%. If apartment/house without plot/tools/machinery: -25%.
-- Point 3 (Location within 30km, 20% weight): If Wittenberge or village within 30km: +20%. If >30km away (e.g. Wittstock, Neuruppin): -20%.
-- Point 4 (Size 1,000 - 5,000 m², 20% weight): If verified in 1,000 - 5,000 m² range: +20%. If explicitly outside range (<1,000 or >5,000): -20%. If size unstated in snippet: -10%.
+HARD KNOCKOUT RULES (Score = 0% and verdict = "REJECT" INSTANTLY if ANY condition fails):
+- KNOCKOUT 1 (Price > 50,000 €): If explicit price is > 50,000 € (e.g. 55k, 60k, 65k, 150k) -> match_percentage = 0, verdict = "REJECT", rejection_reason = "Цена превышает лимит 50.000 €".
+- KNOCKOUT 2 (Size out of bounds): If size is explicitly stated and < 1,000 m² or > 5,000 m² -> match_percentage = 0, verdict = "REJECT", rejection_reason = "Площадь вне диапазона 1.000 - 5.000 м²".
+- KNOCKOUT 3 (Distance > 30 km): If location is > 30 km from Wittenberge (e.g. Wittstock, Neuruppin, Dranse, Stendal) -> match_percentage = 0, verdict = "REJECT", rejection_reason = "Расстояние превышает 30 км от Виттенберге".
+- KNOCKOUT 4 (Wanted / Lease): If wanted ad ("Gesuch", "Suche") or lease/rental ("Pacht", "Miete", "verpachten") -> match_percentage = 0, verdict = "REJECT", rejection_reason = "Не является предложением продажи (Gesuch/Pacht)".
+- KNOCKOUT 5 (Not a Plot): If apartment, pure house without plot, machinery, timber forest -> match_percentage = 0, verdict = "REJECT", rejection_reason = "Не является земельным участком".
+
+SCORING (0 to 100% total - only if ALL knockouts pass):
+1. Price (25 pts): Price <= 50,000 € or negotiable VB: +25 pts.
+2. Size (25 pts): Explicitly verified in 1,000 - 5,000 m²: +25 pts. Size unstated in snippet: +10 pts.
+3. Proximity to Wittenberge (25 pts) - CLOSER IS BETTER:
+   - 0 to 10 km (Wittenberge 0km, Breese, Weisen, Cumlosen, Perleberg): Ideal, top priority! +25 pts.
+   - 11 to 20 km (Lenzen, Karstädt, Bad Wilsnack, Seehausen): Good! +18 pts.
+   - 21 to 27 km (Osterburg, Havelberg): Acceptable distance: +10 pts.
+   - 28 to 30 km (Kyritz, Pritzwalk): Far border distance! Client specifically notes ~29 km is far and suboptimal: +4 pts.
+4. Property & Sale Offer (25 pts): Verified offer to sell plot/building land: +25 pts.
 
 VERBATIM QUOTE REQUIREMENT (Zero Hallucination):
 Every quote in "evidence" MUST be an exact verbatim substring copied directly from the title, specs, or description:
@@ -365,7 +421,7 @@ Every quote in "evidence" MUST be an exact verbatim substring copied directly fr
 - "location_quote": exact quote of location
 - "size_quote": exact quote of size if mentioned
 
-CRITICAL: You MUST return exactly one evaluation for EVERY single ad_id in the input list ({[c['ad_id'] for c in chunk]}). Do not omit any ad_id.
+CRITICAL: Return evaluation for EVERY ad_id in the input list ({[c['ad_id'] for c in chunk]}).
 If match_percentage >= 70%: verdict is "PASS". Otherwise "REJECT".
 
 Listings to audit:
@@ -434,6 +490,50 @@ Return JSON:
                                         score = max(0, score - 20)
                                         quotes_verified = False
 
+                                # Programmatic Knockout Safeguard (Zero AI Hallucination):
+                                price_str = c.get("price") or ""
+                                price_m = re.search(r'(\d+(?:\.\d+)?)\s*(?:€|euro)', price_str, re.IGNORECASE)
+                                if price_m:
+                                    try:
+                                        val = float(price_m.group(1).replace(".", ""))
+                                        if val > MAX_PRICE_EUR:
+                                            score = 0
+                                            ev_record["rejection_reason"] = f"Цена {val:.0f} € превышает лимит {MAX_PRICE_EUR} €"
+                                    except Exception:
+                                        pass
+
+                                loc_str = (c.get("location") or "").lower()
+                                dist_m = re.search(r'(?:ca\.\s*)?(\d+)\s*km', loc_str)
+                                if dist_m:
+                                    try:
+                                        if int(dist_m.group(1)) > MAX_RADIUS_KM:
+                                            score = 0
+                                            ev_record["rejection_reason"] = f"Расстояние {dist_m.group(1)} км превышает {MAX_RADIUS_KM} км"
+                                    except Exception:
+                                        pass
+
+                                # Check explicit size in post-evaluator
+                                full_c_text = f"{c.get('size_str', '')} {c_text}"
+                                ha_chk = re.search(r'(\d+(?:[,\.]\d+)?)\s*\b(?:ha|hektar)\b', full_c_text, re.IGNORECASE)
+                                if ha_chk:
+                                    try:
+                                        h_val = float(ha_chk.group(1).replace(",", "."))
+                                        if h_val < 0.1 or h_val > 0.5:
+                                            score = 0
+                                            ev_record["rejection_reason"] = f"Площадь {h_val} га вне диапазона 1.000 - 5.000 м²"
+                                    except Exception:
+                                        pass
+
+                                sqm_chk = re.search(r'(\d+(?:[\.,]\d+)?)\s*(?:m²|qm|m2)', full_c_text)
+                                if sqm_chk:
+                                    try:
+                                        sq_val = float(sqm_chk.group(1).replace(".", "").replace(",", "."))
+                                        if sq_val < MIN_SIZE_SQM or sq_val > MAX_SIZE_SQM:
+                                            score = 0
+                                            ev_record["rejection_reason"] = f"Площадь {sq_val:.0f} м² вне диапазона [{MIN_SIZE_SQM}, {MAX_SIZE_SQM}]"
+                                    except Exception:
+                                        pass
+
                                 c["score"] = score
                                 c["verdict"] = "MATCH" if (score >= MATCH_THRESHOLD and quotes_verified) else "REJECTED"
                                 c["summary_ru"] = ev_record.get("summary_ru", "")
@@ -463,7 +563,12 @@ Return JSON:
                         time.sleep(wait_sec)
                         continue
                     else:
-                        safe_log(f"[Groq AI] Model {model_name} HTTP {e.code}: {e.reason}. Trying next model...")
+                        err_body = ""
+                        try:
+                            err_body = e.read().decode('utf-8', errors='replace')
+                        except Exception:
+                            pass
+                        safe_log(f"[Groq AI] Model {model_name} HTTP {e.code}: {e.reason} ({err_body[:80]}). Trying next model...")
                         break
                 except Exception as e:
                     safe_log(f"[Groq AI] Model {model_name} error: {e}. Trying next model...")
@@ -667,7 +772,7 @@ def generate_dashboards(all_evaluated: list, new_alerts_count: int):
     payload = {
         "last_updated": datetime.now().isoformat(),
         "client": CLIENT_NAME,
-        "criteria": "Wittenberge 19322 (+30km), Dorf/Grundstück, 1.000 - 5.000 m², Offer for Sale",
+        "criteria": "Wittenberge 19322 (+30km, closer is better), Dorf/Grundstück, 1.000 - 5.000 m², Offer for Sale, Max 50.000 €",
         "total_scanned": len(all_evaluated),
         "matches_count": len(matches),
         "rejected_count": len(rejected),
@@ -701,7 +806,7 @@ def generate_dashboards(all_evaluated: list, new_alerts_count: int):
         matches_table_rows.append(
             f"| **{it.get('score')}%** | [{it['title'][:45]}...]({it['url']}) | `{it['price']}` | {it['location']} | {size} | `{ev.get('offer_type_quote')}` / `{ev.get('property_type_quote')}` | [Direct Listing]({it['url']}) |"
         )
-    matches_table_str = "\n".join(matches_table_rows) if matches_table_rows else "| - | *No properties currently active in the exact 1,000-5,000m² bracket.* | - | - | - | - | - |"
+    matches_table_str = "\n".join(matches_table_rows) if matches_table_rows else "| - | *No properties currently active in the exact 1,000-5,000m² bracket under 50.000 €.* | - | - | - | - | - |"
 
     audit_log_rows = []
     for it in all_evaluated[:15]:
@@ -727,8 +832,9 @@ def generate_dashboards(all_evaluated: list, new_alerts_count: int):
 | :--- | :--- | :--- |
 | 🟢 **Heartbeat** | Runner Schedule | Every 4 hours (`0 */4 * * *`) via GitHub Actions |
 | ⏱️ **Last Cycle** | Executed at | `{now_str}` |
-| 🎯 **Target Region** | Search Area | **Wittenberge (19322) + 30 km radius** (Prignitz / Altmark) |
-| 📐 **Target Area** | Plot Size | **1,000 – 5,000 m²** (Village plots & building land) |
+| 🎯 **Target Region** | Search Area | **Wittenberge (19322) + 30 km radius** (Closer to Wittenberge prioritized) |
+| 📐 **Target Area** | Plot Size | **1,000 – 5,000 m²** (Strict Knockout) |
+| 💰 **Max Budget** | Price Limit | **≤ 50,000 €** (Strict Knockout) |
 | 🤖 **Telegram Alert** | Client Recipient | **Iurii (`{CLIENT_CHAT_ID}`)** via [@Grundstuck_Wittenberge_bot](https://t.me/Grundstuck_Wittenberge_bot) |
 | 📊 **Active Matches** | Score ≥ 70% | **{len(matches)}** verified listings |
 
@@ -736,10 +842,11 @@ def generate_dashboards(all_evaluated: list, new_alerts_count: int):
 
 ## 🎯 High-Match Properties (≥ 70% Match Score)
 
-> These properties strictly verified zero-hallucination evidence quotes for sale offer, property type, 30km radius, and 1,000-5,000 m² area.
+> These properties strictly verified zero-hallucination evidence quotes for sale offer, property type, 30km radius (proximity prioritized), ≤ 50.000 € budget, and 1,000-5,000 m² area.
 
 | Match | Title | Price | Location | Area | Groq Evidence Quotes | Link |
 | :---: | :--- | :---: | :--- | :---: | :--- | :---: |
+{matches_table_str}
 {matches_table_str}
 
 ---
@@ -929,6 +1036,10 @@ Kleinanzeigen DOM Parser (Direct /s-anzeige/ URLs)
       <div class="metric-card">
         <div class="label">Size Requirement</div>
         <div class="val" style="font-size: 20px;">1,000 – 5,000 m²</div>
+      </div>
+      <div class="metric-card">
+        <div class="label">Budget Cap</div>
+        <div class="val" style="font-size: 20px; color: var(--accent);">≤ 50,000 €</div>
       </div>
       <div class="metric-card">
         <div class="label">Approved Matches (≥70%)</div>
